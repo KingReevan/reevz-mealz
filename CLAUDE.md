@@ -106,11 +106,15 @@ implemented: Today's screen lists the day's meals grouped by meal type with a sp
 summary strip, and a bottom sheet adds a meal. Room persists everything locally, fully offline.
 
 The app shell has six top-level sections in a bottom navigation bar: **Today, Plan Meal, Bought
-Items, Foods, Money Spent, Settings**. Today and Foods are built; Plan Meal, Bought Items, Money
+Items, Foods, Money Spent, Settings**. Today, Foods and Bought Items are built; Plan Meal, Money
 Spent and Settings are placeholders awaiting their specs.
 
 **Foods** holds atomic food items — name, a Homecooked/Outside toggle, and a price that only
 applies when Outside. They are the building blocks meal planning will draw on. Full CRUD.
+
+**Bought Items** records grocery/ingredient purchases — name, price, date — as a month-wise
+history in the style of a payments app's transaction list: a sticky month heading carrying that
+month's total, then one card per purchase, newest first. Full CRUD.
 
 ```
 app/src/main/java/com/reevan/reevzmealz/
@@ -120,7 +124,9 @@ app/src/main/java/com/reevan/reevzmealz/
 │   ├── MealDao.kt               observeInRange(Flow), insert
 │   ├── Food.kt                  @Entity, atomic food item, nullable pricePaise
 │   ├── FoodDao.kt               observeAll(Flow), insert, update, delete
-│   └── MealDatabase.kt          @Database v2, singleton, exportSchema, autoMigrations
+│   ├── BoughtItem.kt            @Entity, a purchase: name, pricePaise, boughtAt
+│   ├── BoughtItemDao.kt         observeAll(Flow), insert, update, delete
+│   └── MealDatabase.kt          @Database v3, singleton, exportSchema, autoMigrations
 ├── ui/
 │   ├── AppSection.kt            the six sections: title, tab label, icon
 │   ├── ReevzMealzApp.kt         shell: the one Scaffold + bottom NavigationBar
@@ -129,20 +135,20 @@ app/src/main/java/com/reevan/reevzmealz/
 │   ├── theme/                   Theme.kt, Color.kt, Type.kt
 │   ├── today/                   built: TodayScreen, TodayViewModel, AddMealSheet
 │   ├── foods/                    built: FoodsScreen, FoodsViewModel, FoodEditorSheet
+│   ├── bought/                   built: BoughtItemsScreen/ViewModel, editor, MonthGrouping
 │   ├── plan/                    placeholder
-│   ├── bought/                  placeholder
 │   ├── money/                   placeholder
 │   └── settings/                placeholder
 └── util/
     ├── Money.kt                 paise <-> "₹420.50", editable-field rendering
     ├── FoodFormat.kt            food source labels and row subtitles
-    └── Dates.kt                 day boundaries via Calendar
+    └── Dates.kt                 day boundaries, month keys/labels, via Calendar
 ```
 
 Conventions set in milestone 1 — keep following them:
 
-- **Money is an integer count of paise** (`Meal.costPaise`, `Food.pricePaise`). Never a `Float`
-  or `Double`.
+- **Money is an integer count of paise** (`Meal.costPaise`, `Food.pricePaise`,
+  `BoughtItem.pricePaise`). Never a `Float` or `Double`.
 - **`MealPlace` (HOME / OUT) is shared** by `Meal.place` and `Food.source` — it is the same
   distinction, so there is no parallel enum. The Foods UI labels it "Homecooked" / "Outside".
 - **A homecooked food has `pricePaise = null`**, not zero. `FoodsViewModel.save` nulls it out on
@@ -156,7 +162,15 @@ Conventions set in milestone 1 — keep following them:
 - **No DI library.** `MealDatabase.getInstance()` plus a `viewModelFactory` covers it.
 - User-visible strings live inline in the composables, not `strings.xml` — single-language personal
   app. Revisit only if localization is actually wanted.
-- Meal timestamps are always "now". There is deliberately no date/time picker yet.
+- Meal and purchase timestamps are always "now". There is deliberately no date/time picker yet.
+  Editing an existing record preserves its original timestamp, so a typo fix cannot move an item
+  into a different month.
+- **Month grouping keys on `year * 100 + month`** (`monthKeyOf`), never on month alone — the same
+  month in different years must not merge. Grouping lives in `ui/bought/MonthGrouping.kt` as a
+  pure function so it is unit-testable without a device.
+- `BoughtItem` is deliberately **not** linked to `Food`. A purchase is an event; a Food is a
+  reusable planning block. Requiring every purchase to exist as a Food first would add friction
+  for no gain. Revisit only if the two genuinely need to reconcile.
 - No icon-pack dependency. `material-icons-core` is frozen at 1.7.8 while Compose is on 1.10.4
   and the artifact is deprecated, so navigation icons are hand-authored vector drawables in
   `res/drawable/ic_*.xml`. Do not put `android:tint="?attr/colorControlNormal"` in them — that is
