@@ -1,0 +1,165 @@
+# Reevz Mealz
+
+## What this project is
+
+Reevz Mealz is a **personal Android app** for managing meals, meal planning, food spending, and
+eating-out frequency. The primary goal is to make it easier for me to decide what to eat, and to
+reduce unnecessary eating out and unnecessary spending.
+
+It is a personal app — not a multi-user SaaS product. Treat that as a design constraint, not a
+temporary phase.
+
+## Stack
+
+- Kotlin + Jetpack Compose
+- Material 3
+- Room for local persistence
+- MVVM
+- Android-first
+- Local-first / offline-first
+
+## Core principles
+
+- Keep the app simple and fast to use.
+- **Do not introduce a backend, authentication, cloud database, analytics, or AI** unless I
+  explicitly ask for it.
+- Prefer local storage and offline functionality.
+- Prefer Android/Jetpack libraries when they are appropriate.
+- Keep the architecture understandable rather than over-engineered.
+- Do not build abstractions for hypothetical future requirements. Solve the problem in front of you.
+
+## Working rules
+
+- Make small, focused changes. Do not modify unrelated files.
+- Preserve existing functionality when implementing new features.
+- **Before making an architectural change, explain the reason first.**
+- **Before adding a dependency, explain why it is needed** and why an existing library or the
+  standard library is not enough.
+- Run the appropriate build/tests after significant changes.
+- **Never claim a feature works without verifying it.** If verification did not run, or failed, say
+  so plainly and show the output.
+- Do not silently change project-wide configuration (Gradle files, version catalog,
+  `gradle.properties`, manifest, theme). If a config change is genuinely required, call it out and
+  explain it.
+
+### Feature workflow
+
+1. Inspect the existing implementation.
+2. Explain the proposed approach briefly.
+3. Make the smallest reasonable change.
+4. Build/test the project.
+5. Report what changed and whether verification succeeded.
+
+## Build and verify
+
+Windows / PowerShell (primary shell here):
+
+```
+.\gradlew.bat assembleDebug          # compile the app
+.\gradlew.bat testDebugUnitTest      # host unit tests
+.\gradlew.bat lint                   # Android lint
+```
+
+Instrumented tests (`connectedDebugAndroidTest`) need a running emulator or device; don't assume one
+is attached.
+
+## Git
+
+- Keep commits small and logically focused.
+- Do not commit generated build artifacts, `local.properties`, IDE-specific files, or secrets.
+- Do not rewrite Git history unless explicitly requested.
+- **Do not push to GitHub unless explicitly requested.**
+- Note: `.gitignore` currently ignores only a few `.idea/*` paths, so `.idea/` shows up as
+  untracked. Do not commit it.
+
+## UI guidelines
+
+- Design primarily for a **phone**.
+- Optimize for quick **one-handed** interaction — common actions reachable with a thumb.
+- Prioritize clarity and ease of use over visual complexity.
+- Avoid unnecessary screens and navigation. Fewer taps to log a meal is the goal.
+- Use Jetpack Compose and Material 3.
+- Support **light and dark themes** — the existing `ReevzMealzTheme` already handles dynamic color
+  and light/dark, so route new UI through it.
+- Use accessible touch targets (48dp minimum) and readable typography.
+
+## Data guidelines
+
+- Meal data is stored **locally**.
+- Once persistent data exists, database schema changes **must** use proper Room migrations. Do not
+  rely on `fallbackToDestructiveMigration`.
+- Room schemas are exported to `app/schemas/` and **are committed** — they are the baseline every
+  future migration is written against. Schema changes mean bumping `@Database(version = ...)` and
+  adding a real `Migration`.
+- Do not delete or reset user data as part of a normal feature implementation.
+- Treat user-entered meal and spending data as valuable and non-recoverable.
+
+## Current project state
+
+Single Gradle module `:app`, package `com.reevan.reevzmealz`. Milestone 1 (meal logging) is
+implemented: Today's screen lists the day's meals grouped by meal type with a spend / eating-out
+summary strip, and a bottom sheet adds a meal. Room persists everything locally, fully offline.
+
+```
+app/src/main/java/com/reevan/reevzmealz/
+├── MainActivity.kt              single ComponentActivity, hosts TodayScreen
+├── data/
+│   ├── Meal.kt                  @Entity + MealType / MealPlace enums
+│   ├── MealDao.kt               observeInRange(Flow), insert
+│   └── MealDatabase.kt          @Database v1, singleton, exportSchema = true
+├── ui/
+│   ├── theme/                   Theme.kt, Color.kt, Type.kt
+│   └── today/
+│       ├── TodayScreen.kt       grouped list + summary + FAB
+│       ├── TodayViewModel.kt    StateFlow<TodayUiState>, addMeal
+│       └── AddMealSheet.kt      ModalBottomSheet form
+└── util/
+    ├── Money.kt                 paise <-> "₹420.50"
+    └── Dates.kt                 day boundaries via Calendar
+```
+
+Conventions set in milestone 1 — keep following them:
+
+- **Money is an integer count of paise** (`Meal.costPaise`). Never a `Float` or `Double`.
+- **`java.util.Calendar`, not `java.time`.** `java.time` needs API 26 and `minSdk` is 24, so using
+  it would require core library desugaring or raising `minSdk`. Change that deliberately, not
+  incidentally.
+- **No Repository layer.** With a single local data source it would be a pure pass-through, so the
+  ViewModel uses the DAO directly.
+- **No DI library.** `MealDatabase.getInstance()` plus a `viewModelFactory` covers it.
+- User-visible strings live inline in the composables, not `strings.xml` — single-language personal
+  app. Revisit only if localization is actually wanted.
+- Meal timestamps are always "now". There is deliberately no date/time picker yet.
+- No icon-pack dependency: the FAB and buttons use text labels.
+
+## Toolchain notes (non-obvious — read before touching Gradle)
+
+This project is on a very new toolchain, and several things differ from older Android setups:
+
+- **AGP 9.3.2**, Gradle 9.5.0, Kotlin 2.2.10, Compose BOM 2026.02.01.
+- **There is no `org.jetbrains.kotlin.android` plugin.** AGP 9 compiles Kotlin itself. Only
+  `com.android.application` and `org.jetbrains.kotlin.plugin.compose` are applied. Don't "fix" this
+  by adding the Kotlin Android plugin.
+- `compileSdk` uses the AGP 9 block form: `compileSdk { version = release(37) }`. `targetSdk 37`,
+  `minSdk 24`.
+- Release build type uses `optimization { enable = false }` — the AGP 9 replacement for
+  `isMinifyEnabled` / `proguardFiles`. R8 is currently off; that needs flipping before any real
+  release.
+- R8 keep rules live in `app/src/main/keepRules/rules.keep`, not `proguard-rules.pro`.
+- Gradle **configuration cache is enabled**. Build logic that isn't configuration-cache-safe will
+  fail the build.
+- All dependencies and versions go through the version catalog at `gradle/libs.versions.toml` —
+  never hardcode a version in `app/build.gradle.kts`.
+- **`android.disallowKotlinSourceSets=false` in `gradle.properties` is load-bearing. Do not remove
+  it.** KSP (Room's code generator) registers its generated source directories through
+  `kotlin.sourceSets`, which built-in Kotlin rejects by default (AGP issue #386221070). Without the
+  flag the build fails at configuration time. It only relaxes that ownership check — it does not
+  disable built-in Kotlin. Drop it once AGP and KSP stop conflicting.
+- KSP must track the Kotlin version: Kotlin 2.2.10 pairs with KSP `2.2.10-2.0.2`.
+- `compileOptions` targets **Java 17** while the Gradle daemon toolchain is Java 25. That is
+  intentional and fine — the daemon JVM is not the bytecode target. Kotlin follows `compileOptions`
+  on its own, so there is no `jvmTarget` / `jvmToolchain` block and none is needed.
+- Remaining rough edge: the catalog declares `core-ktx 1.10.1` and `lifecycle-runtime-ktx 2.6.1`,
+  but they actually resolve to `1.18.0` and `2.9.4` because transitive constraints pull them up.
+  The build is correct; the catalog just is not telling the truth. Worth reconciling so the
+  effective versions stop depending on a transitive chain.
