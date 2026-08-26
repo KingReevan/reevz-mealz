@@ -11,13 +11,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,29 +33,25 @@ import com.reevan.reevzmealz.util.formatDayHeading
 import com.reevan.reevzmealz.util.formatPaise
 import com.reevan.reevzmealz.util.formatTimeOfDay
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Today's meals. The app shell owns the Scaffold, top bar and bottom bar, so this is plain
+ * content with the FAB drawn as an overlay in its own Box.
+ */
 @Composable
 fun TodayScreen(
+    modifier: Modifier = Modifier,
     viewModel: TodayViewModel = viewModel(factory = TodayViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsState()
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = { Text("Today · " + formatDayHeading(viewModel.dayStart)) },
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            DailySummary(
+                dayStart = viewModel.dayStart,
+                totalPaise = state.totalPaise,
+                mealsOutCount = state.mealsOutCount,
             )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = { sheetOpen = true }) {
-                Text("Add meal")
-            }
-        },
-    ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding)) {
-            DailySummary(totalPaise = state.totalPaise, mealsOutCount = state.mealsOutCount)
             HorizontalDivider()
 
             if (state.loaded && state.meals.isEmpty()) {
@@ -66,6 +59,15 @@ fun TodayScreen(
             } else {
                 MealList(meals = state.meals)
             }
+        }
+
+        ExtendedFloatingActionButton(
+            onClick = { sheetOpen = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+        ) {
+            Text("Add meal")
         }
     }
 
@@ -81,27 +83,34 @@ fun TodayScreen(
 }
 
 @Composable
-private fun DailySummary(totalPaise: Long, mealsOutCount: Int) {
+private fun DailySummary(dayStart: Long, totalPaise: Long, mealsOutCount: Int) {
     val outText = when (mealsOutCount) {
         0 -> "all home"
         1 -> "1 meal out"
         else -> mealsOutCount.toString() + " meals out"
     }
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
-            text = formatPaise(totalPaise),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text(
-            text = "· " + outText,
-            style = MaterialTheme.typography.titleMedium,
+            text = formatDayHeading(dayStart),
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = formatPaise(totalPaise),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = "· " + outText,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

@@ -16,6 +16,20 @@ fun formatPaise(paise: Long): String {
 }
 
 /**
+ * Renders paise as plain rupees suitable for prefilling a text field: 12000 -> "120",
+ * 12050 -> "120.50". No currency symbol, because the field shows its own prefix.
+ */
+fun paiseToEditableRupees(paise: Int): String {
+    val rupees = paise / 100
+    val remainder = paise % 100
+    return if (remainder == 0) {
+        rupees.toString()
+    } else {
+        "$rupees.${remainder.toString().padStart(2, '0')}"
+    }
+}
+
+/**
  * Parses rupees as typed by hand ("42", "42.5", "42.50") into paise.
  * Blank input counts as zero, since a home-cooked meal may have no cost worth entering.
  * Returns null when the text is not a valid amount, so the caller can block the save.

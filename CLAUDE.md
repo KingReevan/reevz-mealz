@@ -91,6 +91,11 @@ is attached.
 - Room schemas are exported to `app/schemas/` and **are committed** — they are the baseline every
   future migration is written against. Schema changes mean bumping `@Database(version = ...)` and
   adding a real `Migration`.
+- Additive schema changes (new table, new nullable column) should use `@AutoMigration`, which Room
+  generates from the exported schema diff — far safer than hand-writing `CREATE TABLE` SQL that
+  must match Room's expected hash exactly. Non-additive changes still need a manual `Migration`.
+- Room migrations can only be tested with instrumented tests (`MigrationTestHelper`), so they need
+  a device. Say plainly when a migration has not been exercised on one.
 - Do not delete or reset user data as part of a normal feature implementation.
 - Treat user-entered meal and spending data as valuable and non-recoverable.
 
@@ -100,27 +105,49 @@ Single Gradle module `:app`, package `com.reevan.reevzmealz`. Milestone 1 (meal 
 implemented: Today's screen lists the day's meals grouped by meal type with a spend / eating-out
 summary strip, and a bottom sheet adds a meal. Room persists everything locally, fully offline.
 
+The app shell has six top-level sections in a bottom navigation bar: **Today, Plan Meal, Bought
+Items, Foods, Money Spent, Settings**. Today and Foods are built; Plan Meal, Bought Items, Money
+Spent and Settings are placeholders awaiting their specs.
+
+**Foods** holds atomic food items — name, a Homecooked/Outside toggle, and a price that only
+applies when Outside. They are the building blocks meal planning will draw on. Full CRUD.
+
 ```
 app/src/main/java/com/reevan/reevzmealz/
-├── MainActivity.kt              single ComponentActivity, hosts TodayScreen
+├── MainActivity.kt              single ComponentActivity, hosts ReevzMealzApp
 ├── data/
 │   ├── Meal.kt                  @Entity + MealType / MealPlace enums
 │   ├── MealDao.kt               observeInRange(Flow), insert
-│   └── MealDatabase.kt          @Database v1, singleton, exportSchema = true
+│   ├── Food.kt                  @Entity, atomic food item, nullable pricePaise
+│   ├── FoodDao.kt               observeAll(Flow), insert, update, delete
+│   └── MealDatabase.kt          @Database v2, singleton, exportSchema, autoMigrations
 ├── ui/
+│   ├── AppSection.kt            the six sections: title, tab label, icon
+│   ├── ReevzMealzApp.kt         shell: the one Scaffold + bottom NavigationBar
+│   ├── common/
+│   │   └── SectionPlaceholder.kt  stand-in body for unbuilt sections
 │   ├── theme/                   Theme.kt, Color.kt, Type.kt
-│   └── today/
-│       ├── TodayScreen.kt       grouped list + summary + FAB
-│       ├── TodayViewModel.kt    StateFlow<TodayUiState>, addMeal
-│       └── AddMealSheet.kt      ModalBottomSheet form
+│   ├── today/                   built: TodayScreen, TodayViewModel, AddMealSheet
+│   ├── foods/                    built: FoodsScreen, FoodsViewModel, FoodEditorSheet
+│   ├── plan/                    placeholder
+│   ├── bought/                  placeholder
+│   ├── money/                   placeholder
+│   └── settings/                placeholder
 └── util/
-    ├── Money.kt                 paise <-> "₹420.50"
+    ├── Money.kt                 paise <-> "₹420.50", editable-field rendering
+    ├── FoodFormat.kt            food source labels and row subtitles
     └── Dates.kt                 day boundaries via Calendar
 ```
 
 Conventions set in milestone 1 — keep following them:
 
-- **Money is an integer count of paise** (`Meal.costPaise`). Never a `Float` or `Double`.
+- **Money is an integer count of paise** (`Meal.costPaise`, `Food.pricePaise`). Never a `Float`
+  or `Double`.
+- **`MealPlace` (HOME / OUT) is shared** by `Meal.place` and `Food.source` — it is the same
+  distinction, so there is no parallel enum. The Foods UI labels it "Homecooked" / "Outside".
+- **A homecooked food has `pricePaise = null`**, not zero. `FoodsViewModel.save` nulls it out on
+  save so a price typed before flipping the toggle cannot leak through.
+- Destructive actions confirm first: deleting a food goes through an `AlertDialog`.
 - **`java.util.Calendar`, not `java.time`.** `java.time` needs API 26 and `minSdk` is 24, so using
   it would require core library desugaring or raising `minSdk`. Change that deliberately, not
   incidentally.
@@ -130,7 +157,16 @@ Conventions set in milestone 1 — keep following them:
 - User-visible strings live inline in the composables, not `strings.xml` — single-language personal
   app. Revisit only if localization is actually wanted.
 - Meal timestamps are always "now". There is deliberately no date/time picker yet.
-- No icon-pack dependency: the FAB and buttons use text labels.
+- No icon-pack dependency. `material-icons-core` is frozen at 1.7.8 while Compose is on 1.10.4
+  and the artifact is deprecated, so navigation icons are hand-authored vector drawables in
+  `res/drawable/ic_*.xml`. Do not put `android:tint="?attr/colorControlNormal"` in them — that is
+  an AppCompat attribute and this project has no AppCompat. Compose's `Icon` tints the painter.
+- **One Scaffold only**, owned by `ReevzMealzApp`. Section screens are plain content composables
+  that take a `Modifier`; Today draws its FAB as a `Box` overlay rather than nesting a Scaffold.
+  This keeps window insets applied exactly once.
+- **No navigation library.** Section switching is `rememberSaveable` state plus a `when`, with a
+  `BackHandler` returning to Today. Add `androidx.navigation.compose` when sections actually gain
+  sub-screens, not before.
 
 ## Toolchain notes (non-obvious — read before touching Gradle)
 
