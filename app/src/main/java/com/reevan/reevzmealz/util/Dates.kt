@@ -161,3 +161,32 @@ private fun yearOf(millis: Long): Int {
     calendar.timeInMillis = millis
     return calendar.get(Calendar.YEAR)
 }
+
+/** Midnight on 1 January of the year containing [millis]. */
+fun startOfYear(millis: Long): Long {
+    val calendar = Calendar.getInstance()
+    calendar.timeInMillis = millis
+    calendar.set(Calendar.DAY_OF_YEAR, 1)
+    return startOfDay(calendar.timeInMillis)
+}
+
+/** Start of the year [years] away from the year containing [millis]. */
+fun addYears(millis: Long, years: Int): Long {
+    val calendar = Calendar.getInstance()
+    calendar.timeInMillis = startOfYear(millis)
+    calendar.add(Calendar.YEAR, years)
+    return startOfDay(calendar.timeInMillis)
+}
+
+fun formatYear(millis: Long): String =
+    SimpleDateFormat("yyyy", Locale.getDefault()).format(Date(millis))
+
+/** How many months of spending history the app keeps and lets you browse. */
+const val RETAINED_MONTHS = 12
+
+/**
+ * Start of the oldest month inside the retention window: anything before this is outside the
+ * 12 months the app keeps, counting the current month as one of them.
+ */
+fun retentionCutoff(now: Long): Long =
+    addMonths(startOfMonth(now), -(RETAINED_MONTHS - 1))

@@ -13,6 +13,7 @@ import androidx.room.RoomDatabase
  * - v3: added `bought_items`
  * - v4: added `planned_meals`
  * - v5: added `eaten_meals` and `eaten_days`
+ * - v6: added `sin_events`, `ended_days` and `sin_settings`
  *
  * Version bumps must add a migration here. Adding a table is purely additive, so Room generates
  * the migration from the exported schemas in `app/schemas/`. Never use
@@ -26,14 +27,18 @@ import androidx.room.RoomDatabase
         PlannedMeal::class,
         EatenMeal::class,
         EatenDay::class,
+        SinEvent::class,
+        EndedDay::class,
+        SinSettings::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
         AutoMigration(from = 3, to = 4),
         AutoMigration(from = 4, to = 5),
+        AutoMigration(from = 5, to = 6),
     ],
 )
 abstract class MealDatabase : RoomDatabase() {
@@ -51,6 +56,14 @@ abstract class MealDatabase : RoomDatabase() {
     abstract fun plannedMealDao(): PlannedMealDao
 
     abstract fun eatenMealDao(): EatenMealDao
+
+    abstract fun sinDao(): SinDao
+
+    /** Read-only totals for Money Spent. No entities of its own, so no schema impact. */
+    abstract fun spendDao(): SpendDao
+
+    /** Enforces the 12-month retention window. Deletes; see the DAO's warning. */
+    abstract fun maintenanceDao(): MaintenanceDao
 
     companion object {
         private const val NAME = "reevz-mealz.db"

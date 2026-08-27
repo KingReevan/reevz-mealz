@@ -35,6 +35,9 @@ import com.reevan.reevzmealz.data.MealType
 import com.reevan.reevzmealz.data.SlotFood
 import com.reevan.reevzmealz.ui.common.FoodPickerSheet
 import com.reevan.reevzmealz.ui.common.PlanSlot
+import com.reevan.reevzmealz.ui.sin.DayAlreadyEndedDialog
+import com.reevan.reevzmealz.ui.sin.EndDayDialog
+import com.reevan.reevzmealz.ui.sin.SinViewModel
 import com.reevan.reevzmealz.util.formatDayHeading
 import com.reevan.reevzmealz.util.formatPaise
 
@@ -49,12 +52,15 @@ fun TodayScreen(
     modifier: Modifier = Modifier,
     onGoToPlan: () -> Unit = {},
     viewModel: TodayViewModel = viewModel(factory = TodayViewModel.Factory),
+    sinViewModel: SinViewModel = viewModel(factory = SinViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsState()
     val anyFoodsExist by viewModel.anyFoodsExist.collectAsState()
+    val sinState by sinViewModel.uiState.collectAsState()
 
     var editMode by rememberSaveable { mutableStateOf(false) }
     var pickerForSlot by remember { mutableStateOf<MealType?>(null) }
+    var showEndDay by remember { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxSize()) {
         EditModeHeader(
@@ -118,7 +124,28 @@ fun TodayScreen(
             totalPaise = state.totalPaise,
             plannedTotalPaise = state.plannedTotalPaise,
             showPlanned = state.showPlannedComparison,
+            dayEnded = sinState.todayEnded,
+            onEndDay = { showEndDay = true },
         )
+    }
+
+    if (showEndDay) {
+        if (sinState.todayEnded) {
+            DayAlreadyEndedDialog(
+                status = sinState.status,
+                sinnedToday = sinState.sinnedToday,
+                onDismiss = { showEndDay = false },
+            )
+        } else {
+            EndDayDialog(
+                status = sinState.status,
+                onDismiss = { showEndDay = false },
+                onConfirm = { sinned ->
+                    sinViewModel.endDay(sinned)
+                    showEndDay = false
+                },
+            )
+        }
     }
 
     val slotType = pickerForSlot
@@ -285,32 +312,53 @@ private fun SlotFoodRow(food: SlotFood, editMode: Boolean, onRemove: () -> Unit)
 
 /** Pinned footer: the day's real spend, which is the number worth watching. */
 @Composable
-private fun DayTotal(totalPaise: Long, plannedTotalPaise: Long, showPlanned: Boolean) {
+private fun DayTotal(
+    totalPaise: Long,
+    plannedTotalPaise: Long,
+    showPlanned: Boolean,
+    dayEnded: Boolean,
+    onEndDay: () -> Unit,
+) {
     Surface(tonalElevation = 3.dp) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 56.dp)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Total",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                if (showPlanned) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Planned " + formatPaise(plannedTotalPaise),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "Total",
+                        style = MaterialTheme.typography.titleMedium,
                     )
+                    if (showPlanned) {
+                        Text(
+                            text = "Planned " + formatPaise(plannedTotalPaise),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
+                Text(
+                    text = formatPaise(totalPaise),
+                    style = MaterialTheme.typography.titleLarge,
+                )
             }
-            Text(
-                text = formatPaise(totalPaise),
-                style = MaterialTheme.typography.titleLarge,
-            )
+
+            // Kept in the footer so it stays in the thumb zone.
+            Button(
+                onClick = onEndDay,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+            ) {
+                Text(if (dayEnded) "Day ended" else "End day")
+            }
         }
     }
 }

@@ -96,7 +96,11 @@ is attached.
   must match Room's expected hash exactly. Non-additive changes still need a manual `Migration`.
 - Room migrations can only be tested with instrumented tests (`MigrationTestHelper`), so they need
   a device. Say plainly when a migration has not been exercised on one.
-- Do not delete or reset user data as part of a normal feature implementation.
+- Do not delete or reset user data as part of a normal feature implementation. The **one**
+  sanctioned bulk delete is `MaintenanceDao.purgeOlderThan`, the 12-month retention window the
+  user asked for. It is manual (a button in Settings), shows exact row counts, and requires
+  confirmation before deleting. It never touches `foods` or the superseded `meals` table. Do not
+  make it automatic and do not widen its scope without asking.
 - Treat user-entered meal and spending data as valuable and non-recoverable.
 
 ## Current project state
@@ -114,8 +118,7 @@ back to the plan). Editing never touches the plan.
 foods from the Foods section. Several foods per slot. Full CRUD over assignments.
 
 The app shell has six top-level sections in a bottom navigation bar: **Today, Plan Meal, Bought
-Items, Foods, Money Spent, Settings**. Today, Plan Meal, Bought Items and Foods are built; Money
-Spent and Settings are placeholders awaiting their specs.
+Items, Foods, Money Spent, Settings**. All six are built.
 
 **Foods** holds atomic food items — name, a Homecooked/Outside toggle, and a price that only
 applies when Outside. They are the building blocks meal planning will draw on. Full CRUD.
@@ -123,6 +126,20 @@ applies when Outside. They are the building blocks meal planning will draw on. F
 **Bought Items** records grocery/ingredient purchases — name, price, date — as a month-wise
 history in the style of a payments app's transaction list: a sticky month heading carrying that
 month's total, then one card per purchase, newest first. Full CRUD.
+
+**Money Spent** totals a chosen day, week, month or year (toggle, Google-Calendar style, with
+‹ › navigation), split into Bought Items and Outside food. Defaults to the current month.
+Browsing stops at the 12-month retention window, and the current period counts only up to today.
+
+**Settings** holds the sin allowance and the retention control (a manual, confirmed purge of
+records older than 12 months).
+
+**Sins** are the discipline mechanic. One sin = one meal that did not go to plan. The allowance
+(default 40) is per calendar month and configurable, but **locked for 3 days after being set** so
+it cannot be raised the moment it pinches. Remaining sins show in the top-right of every screen.
+An **End day** button on Today opens a dialog with a toggle per meal slot — positive means
+"Good Job!" in green, negative means "This is bad!" in red and costs a sin. Confirming settles the
+day permanently. At zero the dialog is headed "You have failed for the month".
 
 ```
 app/src/main/java/com/reevan/reevzmealz/
@@ -138,6 +155,10 @@ app/src/main/java/com/reevan/reevzmealz/
 │   ├── FoodDao.kt               observeAll(Flow), insert, update, delete
 │   ├── BoughtItem.kt            @Entity, a purchase: name, pricePaise, boughtAt
 │   ├── BoughtItemDao.kt         observeAll(Flow), insert, update, delete
+│   ├── Sin.kt                   SinEvent, EndedDay, SinSettings entities
+│   ├── SinDao.kt                sin counts, endDay transaction, allowance settings
+│   ├── SpendDao.kt              read-only period totals for Money Spent
+│   ├── MaintenanceDao.kt        12-month retention purge (the only bulk delete)
 │   └── MealDatabase.kt          @Database v5, singleton, exportSchema, autoMigrations
 ├── ui/
 │   ├── AppSection.kt            the six sections: title, tab label, icon
@@ -151,8 +172,9 @@ app/src/main/java/com/reevan/reevzmealz/
 │   ├── foods/                    built: FoodsScreen, FoodsViewModel, FoodEditorSheet
 │   ├── bought/                   built: BoughtItemsScreen/ViewModel, editor, MonthGrouping
 │   ├── plan/                     built: PlanMealScreen/ViewModel, DayPicker
-│   ├── money/                   placeholder
-│   └── settings/                placeholder
+│   ├── sin/                      SinStatus (rules), SinViewModel, EndDayDialog
+│   ├── money/                    built: MoneySpentScreen/ViewModel, SpendPeriod
+│   └── settings/                 built: SettingsScreen/ViewModel (retention purge)
 └── util/
     ├── Money.kt                 paise <-> "₹420.50", editable-field rendering
     ├── FoodFormat.kt            food source labels and row subtitles
@@ -165,6 +187,34 @@ Conventions set in milestone 1 — keep following them:
   `BoughtItem.pricePaise`). Never a `Float` or `Double`.
 - **`MealPlace` (HOME / OUT) is shared** by `Meal.place` and `Food.source` — it is the same
   distinction, so there is no parallel enum. The Foods UI labels it "Homecooked" / "Outside".
+- **Sins are stored as events, never as a counter.** `sin_events` holds one row per off-plan
+  meal; the month's remaining count is derived as `allowance - sins this calendar month`. That is
+  why requirement 15 needs no code: a new month starts fresh on its own and leftover sins are
+  discarded automatically. Do not "optimise" this into a stored counter — it would need a reset
+  job that can fail to run.
+- **`ended_days` makes a day's judgement final.** `SinDao.endDay` no-ops if the day is already
+  ended, so a second press cannot double-deduct. Pressing End day again shows a read-only summary
+  instead.
+- **The 3-day allowance lock keys off `SinSettings.setAt`, which is null until the user first
+  chooses a number.** The built-in 40 is a starting value, not a decision, so the first change is
+  free. `SinViewModel.setAllowance` re-checks the lock before writing, so a stale screen cannot
+  bypass it.
+- `SinStatus.remaining` is clamped at zero; `failed` is `allowance - used <= 0`, so overshooting
+  the allowance still reads as simply failed rather than negative.
+- Material 3 has no success colour role, so the green for "Good Job!" is the one hand-picked pair
+  in `ui/theme/Color.kt` (`goodColor()`), chosen by `isSystemInDarkTheme()`. Red is
+  `colorScheme.error`.
+- **`SinViewModel` is shared, not per-screen.** `viewModel()` resolves to the activity's store, so
+  the shell badge, Today and Settings all read one instance and cannot disagree.
+- **Money Spent has two streams**: `bought_items` totals, and outside-food cost derived with the
+  same plan-versus-actual rule Today uses (a day's own eaten record if it has one, else its
+  plan). That rule is duplicated once, in `SpendDao.observeOutsideFoodTotal`, because it has to
+  run as SQL — keep it in step with `effectiveSlots` if either changes.
+- Money queries filter on `f.source = :outside` with `MealPlace.OUT` passed as a **parameter**,
+  not a hardcoded `'OUT'` string, so Room's own enum converter does the mapping and renaming the
+  constant cannot silently break the totals.
+- **A period never counts days that have not happened** (`countedRange`), so the current month
+  reads as money already spent rather than a projection.
 - **The cost rule lives in one place: `ui/common/PlanSlots.kt`.** Only food bought outside counts
   towards a slot or day total. Homecooked food contributes nothing — its real cost varies and is
   tracked through Bought Items instead. `PlanSlot.costPaise` filters on `MealPlace.OUT` rather
