@@ -29,6 +29,10 @@ interface PlannedMealDao {
     )
     fun observePlannedDays(start: Long, endExclusive: Long): Flow<List<Long>>
 
+    /** How many foods are planned for one day. Used by the nightly reminder check. */
+    @Query("SELECT COUNT(*) FROM planned_meals WHERE dayStart = :dayStart")
+    suspend fun countForDay(dayStart: Long): Int
+
     /** Assigning a food already in the slot is a no-op rather than a constraint crash. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(plannedMeal: PlannedMeal): Long

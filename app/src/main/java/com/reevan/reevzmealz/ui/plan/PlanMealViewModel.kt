@@ -41,13 +41,14 @@ class PlanMealViewModel(
     foodDao: FoodDao,
 ) : ViewModel() {
 
-    val today: Long = startOfDay(System.currentTimeMillis())
+    private val _today = MutableStateFlow(startOfDay(System.currentTimeMillis()))
+    val today: StateFlow<Long> = _today.asStateFlow()
 
-    private val _selectedDay = MutableStateFlow(today)
+    private val _selectedDay = MutableStateFlow(_today.value)
     val selectedDay: StateFlow<Long> = _selectedDay.asStateFlow()
 
     /** Which month or week the picker is showing; moves independently of the selected day. */
-    private val _anchorDay = MutableStateFlow(today)
+    private val _anchorDay = MutableStateFlow(_today.value)
     val anchorDay: StateFlow<Long> = _anchorDay.asStateFlow()
 
     val uiState: StateFlow<PlanUiState> =
@@ -103,20 +104,49 @@ class PlanMealViewModel(
                 initialValue = false,
             )
 
-    /** Foods assignable to [type] on the selected day: everything not already in that slot. */
-    fun assignableFoods(type: MealType): StateFlow<List<Food>> =
-        combine(allFoods, uiState) { foods, state ->
-            val taken = state.slots.firstOrNull { it.type == type }
-                ?.foods
-                ?.map { it.foodId }
-                ?.toSet()
-                .orEmpty()
-            foods.filterNot { taken.contains(it.id) }
+    /** Which slot the food picker is open for, or null. */
+    private val _pickerSlot = MutableStateFlow<MealType?>(null)
+    val pickerSlot: StateFlow<MealType?> = _pickerSlot.asStateFlow()
+
+    /**
+     * Foods assignable to the open slot: everything not already in it.
+     *
+     * One flow built once, driven by [_pickerSlot] — not a function returning a fresh `stateIn`,
+     * which would start a new sharing coroutine on every recomposition.
+     */
+    val assignableFoods: StateFlow<List<Food>> =
+        combine(allFoods, uiState, _pickerSlot) { foods, state, slot ->
+            if (slot == null) {
+                emptyList()
+            } else {
+                val taken = state.slots.firstOrNull { it.type == slot }
+                    ?.foods
+                    ?.map { it.foodId }
+                    ?.toSet()
+                    .orEmpty()
+                foods.filterNot { taken.contains(it.id) }
+            }
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = emptyList(),
         )
+
+    fun openPicker(type: MealType) {
+        _pickerSlot.value = type
+    }
+
+    fun closePicker() {
+        _pickerSlot.value = null
+    }
+
+    /** Moves the "today" marker if the app was left open across midnight. */
+    fun refreshToday() {
+        val today = startOfDay(System.currentTimeMillis())
+        if (_today.value != today) {
+            _today.value = today
+        }
+    }
 
     fun selectDay(dayStart: Long) {
         _selectedDay.value = startOfDay(dayStart)

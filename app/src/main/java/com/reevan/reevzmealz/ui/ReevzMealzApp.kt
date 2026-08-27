@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -29,6 +30,37 @@ import com.reevan.reevzmealz.ui.money.MoneySpentScreen
 import com.reevan.reevzmealz.ui.plan.PlanMealScreen
 import com.reevan.reevzmealz.ui.settings.SettingsScreen
 import com.reevan.reevzmealz.ui.today.TodayScreen
+
+/**
+ * Sins remaining, in the top-right of every section.
+ *
+ * A compact pill rather than plain text so it stays legible beside longer section titles like
+ * "Bought Items", and turns into an error-coloured chip once the month is spent.
+ */
+@Composable
+private fun SinBadge(sinsLeft: Int) {
+    val failed = sinsLeft == 0
+    Surface(
+        color = if (failed) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.padding(end = 12.dp),
+    ) {
+        Text(
+            text = sinsLeft.toString() + " sins",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (failed) {
+                MaterialTheme.colorScheme.onErrorContainer
+            } else {
+                MaterialTheme.colorScheme.onSecondaryContainer
+            },
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+        )
+    }
+}
 
 /**
  * App shell: a single Scaffold owning the top bar and the bottom navigation bar, with the
@@ -57,19 +89,7 @@ fun ReevzMealzApp() {
         topBar = {
             TopAppBar(
                 title = { Text(section.title) },
-                actions = {
-                    // Requirement: sins shown in the top-right corner, on every section.
-                    Text(
-                        text = "Sins " + sinsLeft,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (sinsLeft == 0) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        modifier = Modifier.padding(end = 16.dp),
-                    )
-                },
+                actions = { SinBadge(sinsLeft = sinsLeft) },
             )
         },
         bottomBar = {

@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.reevan.reevzmealz.data.MealPlace
 import com.reevan.reevzmealz.data.MealType
@@ -57,14 +58,26 @@ fun TodayScreen(
     val state by viewModel.uiState.collectAsState()
     val anyFoodsExist by viewModel.anyFoodsExist.collectAsState()
     val sinState by sinViewModel.uiState.collectAsState()
+    val dayStart by viewModel.dayStart.collectAsState()
+    val pickerForSlot by viewModel.pickerSlot.collectAsState()
 
     var editMode by rememberSaveable { mutableStateOf(false) }
-    var pickerForSlot by remember { mutableStateOf<MealType?>(null) }
     var showEndDay by remember { mutableStateOf(false) }
+
+    // Left open across midnight, the screen would otherwise keep showing yesterday.
+    LifecycleResumeEffect(Unit) {
+        viewModel.refreshDay()
+        sinViewModel.refreshDay()
+        onPauseOrDispose { }
+    }
+
+    // Removing an entry needs an id from the eaten record; before the day is logged the rows on
+    // screen are plan rows, whose ids belong to a different table.
+    val canRemove = editMode && state.dayLogged
 
     Column(modifier = modifier.fillMaxSize()) {
         EditModeHeader(
-            dayStart = viewModel.dayStart,
+            dayStart = dayStart,
             editMode = editMode,
             onEditModeChange = { enabled ->
                 editMode = enabled
@@ -74,7 +87,7 @@ fun TodayScreen(
         HorizontalDivider()
 
         Box(modifier = Modifier.weight(1f)) {
-            if (state.loaded && !state.hasAnything && !editMode) {
+            if (state.loaded && !state.hasAnything && !editMode && !state.dayLogged) {
                 NothingPlanned(
                     onGoToPlan = onGoToPlan,
                     onEditToday = {
@@ -87,7 +100,10 @@ fun TodayScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
                 ) {
-                    items(state.slots.size) { index ->
+                    items(
+                        count = state.slots.size,
+                        key = { index -> state.slots[index].type.name },
+                    ) { index ->
                         val slot = state.slots[index]
                         SlotBlock(
                             slot = slot,
@@ -98,7 +114,8 @@ fun TodayScreen(
                             },
                             showPlannedLine = state.dayLogged,
                             editMode = editMode,
-                            onAddFood = { pickerForSlot = slot.type },
+                            canRemove = canRemove,
+                            onAddFood = { viewModel.openPicker(slot.type) },
                             onRemoveFood = viewModel::removeFood,
                             onClearSlot = { viewModel.clearSlot(slot.type) },
                         )
@@ -150,15 +167,15 @@ fun TodayScreen(
 
     val slotType = pickerForSlot
     if (slotType != null) {
-        val addable by viewModel.addableFoods(slotType).collectAsState()
+        val addable by viewModel.addableFoods.collectAsState()
         FoodPickerSheet(
             slotType = slotType,
             foods = addable,
             anyFoodsExist = anyFoodsExist,
-            onDismiss = { pickerForSlot = null },
+            onDismiss = viewModel::closePicker,
             onPick = { food ->
                 viewModel.addFood(slotType, food)
-                pickerForSlot = null
+                viewModel.closePicker()
             },
         )
     }
@@ -198,6 +215,7 @@ private fun SlotBlock(
     plannedNames: List<String>,
     showPlannedLine: Boolean,
     editMode: Boolean,
+    canRemove: Boolean,
     onAddFood: () -> Unit,
     onRemoveFood: (Long) -> Unit,
     onClearSlot: () -> Unit,
@@ -246,7 +264,7 @@ private fun SlotBlock(
             slot.foods.forEach { food ->
                 SlotFoodRow(
                     food = food,
-                    editMode = editMode,
+                    canRemove = canRemove,
                     onRemove = { onRemoveFood(food.entryId) },
                 )
             }
@@ -279,13 +297,13 @@ private fun SlotBlock(
 }
 
 @Composable
-private fun SlotFoodRow(food: SlotFood, editMode: Boolean, onRemove: () -> Unit) {
+private fun SlotFoodRow(food: SlotFood, canRemove: Boolean, onRemove: () -> Unit) {
     val isOutside = food.source == MealPlace.OUT
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .padding(start = 16.dp, end = if (editMode) 4.dp else 16.dp, top = 4.dp, bottom = 4.dp),
+            .padding(start = 16.dp, end = if (canRemove) 4.dp else 16.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -302,7 +320,7 @@ private fun SlotFoodRow(food: SlotFood, editMode: Boolean, onRemove: () -> Unit)
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
         )
-        if (editMode) {
+        if (canRemove) {
             TextButton(onClick = onRemove) {
                 Text(text = "✕", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

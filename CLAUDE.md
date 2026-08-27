@@ -131,8 +131,12 @@ month's total, then one card per purchase, newest first. Full CRUD.
 ‹ › navigation), split into Bought Items and Outside food. Defaults to the current month.
 Browsing stops at the 12-month retention window, and the current period counts only up to today.
 
-**Settings** holds the sin allowance and the retention control (a manual, confirmed purge of
-records older than 12 months).
+**Settings** is the single home for configuration, in sections: **Theme** (System/Light/Dark),
+**Notifications** (nightly reminder on/off and time), **Sins** (monthly allowance), **Storage**
+(the retention purge). New settings belong here as another section.
+
+**Notifications**: one nightly reminder, default 19:00 device-local, which fires only when
+tomorrow has *nothing* planned at all.
 
 **Sins** are the discipline mechanic. One sin = one meal that did not go to plan. The allowance
 (default 40) is per calendar month and configurable, but **locked for 3 days after being set** so
@@ -155,11 +159,17 @@ app/src/main/java/com/reevan/reevzmealz/
 │   ├── FoodDao.kt               observeAll(Flow), insert, update, delete
 │   ├── BoughtItem.kt            @Entity, a purchase: name, pricePaise, boughtAt
 │   ├── BoughtItemDao.kt         observeAll(Flow), insert, update, delete
+│   ├── AppSettings.kt           @Entity, theme + reminder prefs, ThemeMode enum
+│   ├── AppSettingsDao.kt        observe/get/upsert
 │   ├── Sin.kt                   SinEvent, EndedDay, SinSettings entities
 │   ├── SinDao.kt                sin counts, endDay transaction, allowance settings
 │   ├── SpendDao.kt              read-only period totals for Money Spent
 │   ├── MaintenanceDao.kt        12-month retention purge (the only bulk delete)
 │   └── MealDatabase.kt          @Database v5, singleton, exportSchema, autoMigrations
+├── notify/
+│   ├── PlanReminderScheduler.kt  AlarmManager arming + pure nextTriggerAt
+│   ├── PlanReminderReceiver.kt   checks tomorrow, notifies, re-arms
+│   └── BootReceiver.kt           re-arms after reboot
 ├── ui/
 │   ├── AppSection.kt            the six sections: title, tab label, icon
 │   ├── ReevzMealzApp.kt         shell: the one Scaffold + bottom NavigationBar
@@ -167,7 +177,7 @@ app/src/main/java/com/reevan/reevzmealz/
 │   │   ├── PlanSlots.kt          PlanSlot, buildSlots/totalCostPaise, effectiveSlots
 │   │   ├── FoodPickerSheet.kt    shared food picker (Today + Plan Meal)
 │   │   └── SectionPlaceholder.kt  stand-in body for unbuilt sections
-│   ├── theme/                   Theme.kt, Color.kt, Type.kt
+│   ├── theme/                   Theme.kt, Color.kt, Type.kt, Shape.kt
 │   ├── today/                   built: TodayScreen, TodayViewModel
 │   ├── foods/                    built: FoodsScreen, FoodsViewModel, FoodEditorSheet
 │   ├── bought/                   built: BoughtItemsScreen/ViewModel, editor, MonthGrouping
@@ -187,6 +197,43 @@ Conventions set in milestone 1 — keep following them:
   `BoughtItem.pricePaise`). Never a `Float` or `Double`.
 - **`MealPlace` (HOME / OUT) is shared** by `Meal.place` and `Food.source` — it is the same
   distinction, so there is no parallel enum. The Foods UI labels it "Homecooked" / "Outside".
+- **Notifications use `AlarmManager`, not WorkManager.** This is time-of-day delivery, which
+  WorkManager is explicitly not for. A one-shot alarm is re-armed by the receiver after each fire
+  and by `BootReceiver` after a reboot — alarms do not survive reboots, so without that receiver
+  the reminder silently stops. `setAndAllowWhileIdle` avoids needing the Android 12+ exact-alarm
+  permission; a nightly nudge does not need to land on the second.
+- The reminder fires **only when tomorrow has nothing planned at all**. A partly planned day
+  stays quiet, deliberately.
+- Reminder time is **device-local, not hardcoded Asia/Kolkata** — the phone is in India so local
+  is IST, and this still behaves sensibly if the phone travels.
+- The permission check before `notify` is **inline, not extracted into a helper**: lint's
+  `MissingPermission` check cannot follow the dataflow through a helper and fails the build. The
+  `SecurityException` catch handles revocation between check and post.
+- The manifest carries `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED` and two receivers. The boot
+  receiver is `exported="false"`, which is correct — only the system sends `BOOT_COMPLETED`.
+- **The kid-friendly look comes from shape and type, not colour.** Material You dynamic colour is
+  deliberately kept, so the palette follows the wallpaper; `ReevzShapes` (rounder than Material's
+  defaults) and the enlarged `Typography` are what carry the friendly feel, and they reach every
+  screen through `ReevzMealzTheme`. A genuinely rounded font would need a file in `res/font`.
+- `ThemeMode` is resolved by `ThemeMode.isDark()`; `MainActivity` reads it from
+  `PreferencesViewModel` so Settings changes apply immediately. Both share one instance via the
+  activity's ViewModel store.
+- **Day-scoped ViewModels hold the day in a `MutableStateFlow`, never captured once in a `val`.**
+  Today, Plan Meal, Money Spent and Sin all expose a `refreshDay()`/`refreshNow()`/`refreshToday()`
+  called from `LifecycleResumeEffect`. Capturing the day at construction meant leaving the app
+  open past midnight showed yesterday and let "End day" settle the wrong date.
+- **Never return a fresh `stateIn(...)` from a function called during composition.** Each call
+  starts a new sharing coroutine in `viewModelScope` that lingers for the `WhileSubscribed`
+  timeout, so a recomposing screen accumulates them. Selection state (`pickerSlot`) lives in the
+  ViewModel and drives one flow built once.
+- **Today's ✕ only appears when `dayLogged` is true** (`canRemove = editMode && state.dayLogged`).
+  Before the day is logged the rows on screen come from `planned_meals`, so their ids would be
+  used against `eaten_meals` — and both tables AUTOINCREMENT from 1, so the ids overlap and the
+  wrong food gets deleted. Adding and clearing are safe (they key on foodId / day+slot); only
+  removal is id-based.
+- **Money is grouped Indian-style** by `formatPaise` (₹1,00,000). Hand-rolled, not
+  `NumberFormat` — Java's `DecimalFormat` cannot express the pattern, and CLDR data varies by
+  platform. `paiseToEditableRupees` stays ungrouped because its output must parse back.
 - **Sins are stored as events, never as a counter.** `sin_events` holds one row per off-plan
   meal; the month's remaining count is derived as `allowance - sins this calendar month`. That is
   why requirement 15 needs no code: a new month starts fresh on its own and leftover sins are

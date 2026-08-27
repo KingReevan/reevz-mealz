@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.reevan.reevzmealz.data.MealPlace
 import com.reevan.reevzmealz.data.MealType
@@ -45,9 +46,15 @@ fun PlanMealScreen(
     val anchorDay by viewModel.anchorDay.collectAsState()
     val plannedDays by viewModel.plannedDays.collectAsState()
     val anyFoodsExist by viewModel.anyFoodsExist.collectAsState()
+    val today by viewModel.today.collectAsState()
+    val pickerForSlot by viewModel.pickerSlot.collectAsState()
 
     var mode by rememberSaveable { mutableStateOf(PickerMode.WEEK) }
-    var pickerForSlot by remember { mutableStateOf<MealType?>(null) }
+
+    LifecycleResumeEffect(Unit) {
+        viewModel.refreshToday()
+        onPauseOrDispose { }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         DayPicker(
@@ -58,7 +65,7 @@ fun PlanMealScreen(
             anchorDay = anchorDay,
             onAnchorChange = viewModel::moveAnchor,
             plannedDays = plannedDays,
-            today = viewModel.today,
+            today = today,
         )
         HorizontalDivider()
 
@@ -75,11 +82,14 @@ fun PlanMealScreen(
                 .fillMaxWidth(),
             contentPadding = PaddingValues(bottom = 16.dp),
         ) {
-            items(state.slots.size) { index ->
+            items(
+                count = state.slots.size,
+                key = { index -> state.slots[index].type.name },
+            ) { index ->
                 val slot = state.slots[index]
                 SlotEditor(
                     slot = slot,
-                    onAddFood = { pickerForSlot = slot.type },
+                    onAddFood = { viewModel.openPicker(slot.type) },
                     onRemoveFood = viewModel::removeSlotFood,
                     onClearSlot = { viewModel.clearSlot(slot.type) },
                 )
@@ -91,15 +101,15 @@ fun PlanMealScreen(
 
     val slotType = pickerForSlot
     if (slotType != null) {
-        val assignable by viewModel.assignableFoods(slotType).collectAsState()
+        val assignable by viewModel.assignableFoods.collectAsState()
         FoodPickerSheet(
             slotType = slotType,
             foods = assignable,
             anyFoodsExist = anyFoodsExist,
-            onDismiss = { pickerForSlot = null },
+            onDismiss = viewModel::closePicker,
             onPick = { food ->
                 viewModel.assignFood(slotType, food)
-                pickerForSlot = null
+                viewModel.closePicker()
             },
         )
     }

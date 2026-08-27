@@ -18,9 +18,13 @@ import com.reevan.reevzmealz.ui.common.buildSlots
 import com.reevan.reevzmealz.ui.common.effectiveSlots
 import com.reevan.reevzmealz.ui.common.totalCostPaise
 import com.reevan.reevzmealz.util.startOfDay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -49,35 +53,53 @@ data class TodayUiState(
  * Today's screen. Shows the current day's plan until the day is edited, then shows what was
  * actually eaten. Editing never touches the plan — Plan Meal keeps the original.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class TodayViewModel(
-    plannedMealDao: PlannedMealDao,
+    private val plannedMealDao: PlannedMealDao,
     private val eatenMealDao: EatenMealDao,
     foodDao: FoodDao,
 ) : ViewModel() {
 
-    val dayStart: Long = startOfDay(System.currentTimeMillis())
+    /**
+     * The day being shown. Held in state rather than captured once, so [refreshDay] can move it
+     * when the app is left open across midnight.
+     */
+    private val _dayStart = MutableStateFlow(startOfDay(System.currentTimeMillis()))
+    val dayStart: StateFlow<Long> = _dayStart.asStateFlow()
+
+    /** Which slot the food picker is open for, or null. Held here so the flow below is built once. */
+    private val _pickerSlot = MutableStateFlow<MealType?>(null)
+    val pickerSlot: StateFlow<MealType?> = _pickerSlot.asStateFlow()
 
     val uiState: StateFlow<TodayUiState> =
-        combine(
-            plannedMealDao.observeDay(dayStart),
-            eatenMealDao.observeDay(dayStart),
-            eatenMealDao.observeIsLogged(dayStart),
-        ) { planned, eaten, logged ->
-            val plannedSlots = buildSlots(planned)
-            val slots = effectiveSlots(planned = planned, eaten = eaten, dayLogged = logged)
-            TodayUiState(
-                slots = slots,
-                plannedSlots = plannedSlots,
-                totalPaise = totalCostPaise(slots),
-                plannedTotalPaise = totalCostPaise(plannedSlots),
-                dayLogged = logged,
-                loaded = true,
+        _dayStart
+            .flatMapLatest { day ->
+                combine(
+                    plannedMealDao.observeDay(day),
+                    eatenMealDao.observeDay(day),
+                    eatenMealDao.observeIsLogged(day),
+                ) { planned, eaten, logged ->
+                    val plannedSlots = buildSlots(planned)
+                    val slots = effectiveSlots(
+                        planned = planned,
+                        eaten = eaten,
+                        dayLogged = logged,
+                    )
+                    TodayUiState(
+                        slots = slots,
+                        plannedSlots = plannedSlots,
+                        totalPaise = totalCostPaise(slots),
+                        plannedTotalPaise = totalCostPaise(plannedSlots),
+                        dayLogged = logged,
+                        loaded = true,
+                    )
+                }
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+                initialValue = TodayUiState(),
             )
-        }.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = TodayUiState(),
-        )
 
     private val allFoods: StateFlow<List<Food>> =
         foodDao.observeAll()
@@ -96,57 +118,87 @@ class TodayViewModel(
                 initialValue = false,
             )
 
-    /** Foods addable to [type] today: everything not already in that slot. */
-    fun addableFoods(type: MealType): StateFlow<List<Food>> =
-        combine(allFoods, uiState) { foods, state ->
-            val taken = state.slots.firstOrNull { it.type == type }
-                ?.foods
-                ?.map { it.foodId }
-                ?.toSet()
-                .orEmpty()
-            foods.filterNot { taken.contains(it.id) }
+    /**
+     * Foods addable to the open slot: everything not already in it.
+     *
+     * One flow built once, driven by [_pickerSlot] — not a function returning a fresh `stateIn`,
+     * which would start a new sharing coroutine on every recomposition.
+     */
+    val addableFoods: StateFlow<List<Food>> =
+        combine(allFoods, uiState, _pickerSlot) { foods, state, slot ->
+            if (slot == null) {
+                emptyList()
+            } else {
+                val taken = state.slots.firstOrNull { it.type == slot }
+                    ?.foods
+                    ?.map { it.foodId }
+                    ?.toSet()
+                    .orEmpty()
+                foods.filterNot { taken.contains(it.id) }
+            }
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = emptyList(),
         )
 
+    /** Moves to the real current day if it has changed. Called when the screen resumes. */
+    fun refreshDay() {
+        val today = startOfDay(System.currentTimeMillis())
+        if (_dayStart.value != today) {
+            _dayStart.value = today
+        }
+    }
+
+    fun openPicker(type: MealType) {
+        _pickerSlot.value = type
+    }
+
+    fun closePicker() {
+        _pickerSlot.value = null
+    }
+
     /**
      * Called when Edit Mode is switched on. Seeds today's record from the plan the first time, so
      * editing starts from what was intended rather than from an empty day. Idempotent.
      */
     fun beginEditing() {
-        viewModelScope.launch { eatenMealDao.startLoggingDay(dayStart) }
+        val day = _dayStart.value
+        viewModelScope.launch { eatenMealDao.startLoggingDay(day) }
     }
 
     fun addFood(type: MealType, food: Food) {
+        val day = _dayStart.value
         viewModelScope.launch {
             // Safe to repeat: seeding only happens once per day.
-            eatenMealDao.startLoggingDay(dayStart)
-            eatenMealDao.insert(
-                EatenMeal(dayStart = dayStart, type = type, foodId = food.id),
-            )
+            eatenMealDao.startLoggingDay(day)
+            eatenMealDao.insert(EatenMeal(dayStart = day, type = type, foodId = food.id))
         }
     }
 
+    /**
+     * Removes one eaten entry.
+     *
+     * [entryId] must come from the eaten record, so the caller may only offer this once the day is
+     * logged — before that the rows on screen are plan rows and their ids belong to another table.
+     */
     fun removeFood(entryId: Long) {
-        viewModelScope.launch {
-            eatenMealDao.startLoggingDay(dayStart)
-            eatenMealDao.deleteById(entryId)
-        }
+        viewModelScope.launch { eatenMealDao.deleteById(entryId) }
     }
 
     /** Records that nothing was eaten in this slot, which is not the same as never editing it. */
     fun clearSlot(type: MealType) {
+        val day = _dayStart.value
         viewModelScope.launch {
-            eatenMealDao.startLoggingDay(dayStart)
-            eatenMealDao.clearSlot(dayStart, type)
+            eatenMealDao.startLoggingDay(day)
+            eatenMealDao.clearSlot(day, type)
         }
     }
 
     /** Throws away today's edits so the screen shows the plan again. */
     fun resetToPlan() {
-        viewModelScope.launch { eatenMealDao.resetDayToPlan(dayStart) }
+        val day = _dayStart.value
+        viewModelScope.launch { eatenMealDao.resetDayToPlan(day) }
     }
 
     companion object {

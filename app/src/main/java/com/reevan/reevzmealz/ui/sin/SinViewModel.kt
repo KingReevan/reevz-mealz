@@ -13,9 +13,12 @@ import com.reevan.reevzmealz.data.SinSettings
 import com.reevan.reevzmealz.util.addMonths
 import com.reevan.reevzmealz.util.startOfDay
 import com.reevan.reevzmealz.util.startOfMonth
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -36,35 +39,44 @@ data class SinUiState(
  * Shared rather than per-screen — `viewModel()` resolves to the activity's store, so the shell,
  * Today and Settings all read the same instance and cannot disagree.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class SinViewModel(private val sinDao: SinDao) : ViewModel() {
 
-    val today: Long = startOfDay(System.currentTimeMillis())
-
-    private val monthStart: Long = startOfMonth(today)
-    private val monthEndExclusive: Long = addMonths(today, 1)
+    /**
+     * The day being judged. Held in state rather than captured once: leaving the app open past
+     * midnight must not let "End day" settle yesterday.
+     */
+    private val _today = MutableStateFlow(startOfDay(System.currentTimeMillis()))
+    val today: StateFlow<Long> = _today
 
     val uiState: StateFlow<SinUiState> =
-        combine(
-            sinDao.observeSinsUsed(monthStart, monthEndExclusive),
-            sinDao.observeIsDayEnded(today),
-            sinDao.observeSinnedTypes(today),
-            sinDao.observeSettings(),
-        ) { used, ended, sinnedToday, settings ->
-            val now = System.currentTimeMillis()
-            val allowance = settings?.monthlyAllowance ?: DEFAULT_SIN_ALLOWANCE
-            SinUiState(
-                status = SinStatus(allowance = allowance, used = used),
-                todayEnded = ended,
-                sinnedToday = sinnedToday.toSet(),
-                allowanceEditable = canEditAllowance(settings?.setAt, now),
-                daysUntilEditable = daysUntilUnlock(settings?.setAt, now),
-                loaded = true,
+        _today
+            .flatMapLatest { today ->
+                val monthStart = startOfMonth(today)
+                val monthEndExclusive = addMonths(today, 1)
+                combine(
+                    sinDao.observeSinsUsed(monthStart, monthEndExclusive),
+                    sinDao.observeIsDayEnded(today),
+                    sinDao.observeSinnedTypes(today),
+                    sinDao.observeSettings(),
+                ) { used, ended, sinnedToday, settings ->
+                    val now = System.currentTimeMillis()
+                    val allowance = settings?.monthlyAllowance ?: DEFAULT_SIN_ALLOWANCE
+                    SinUiState(
+                        status = SinStatus(allowance = allowance, used = used),
+                        todayEnded = ended,
+                        sinnedToday = sinnedToday.toSet(),
+                        allowanceEditable = canEditAllowance(settings?.setAt, now),
+                        daysUntilEditable = daysUntilUnlock(settings?.setAt, now),
+                        loaded = true,
+                    )
+                }
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+                initialValue = SinUiState(),
             )
-        }.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = SinUiState(),
-        )
 
     /** Just the remaining count, for the top-bar badge. */
     val remaining: StateFlow<Int> =
@@ -76,14 +88,23 @@ class SinViewModel(private val sinDao: SinDao) : ViewModel() {
                 initialValue = DEFAULT_SIN_ALLOWANCE,
             )
 
+    /** Moves to the real current day if it has changed, and so also to a new month. */
+    fun refreshDay() {
+        val today = startOfDay(System.currentTimeMillis())
+        if (_today.value != today) {
+            _today.value = today
+        }
+    }
+
     /**
      * Settles today. [sinnedTypes] are the slots that did not go to plan — one sin each.
      * A day already ended is left untouched.
      */
     fun endDay(sinnedTypes: Set<MealType>) {
+        val day = _today.value
         viewModelScope.launch {
             sinDao.endDay(
-                dayStart = today,
+                dayStart = day,
                 sinned = MealType.entries.filter { sinnedTypes.contains(it) },
                 endedAt = System.currentTimeMillis(),
             )
@@ -95,8 +116,7 @@ class SinViewModel(private val sinDao: SinDao) : ViewModel() {
      * stale screen cannot bypass it.
      */
     fun setAllowance(value: Int) {
-        val state = uiState.value
-        if (!state.allowanceEditable) return
+        if (!uiState.value.allowanceEditable) return
         val clamped = value.coerceIn(0, MAX_ALLOWANCE)
         viewModelScope.launch {
             sinDao.upsertSettings(

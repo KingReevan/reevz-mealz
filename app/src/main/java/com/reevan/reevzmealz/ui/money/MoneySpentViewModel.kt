@@ -44,14 +44,18 @@ data class MoneySpentUiState(
 @OptIn(ExperimentalCoroutinesApi::class)
 class MoneySpentViewModel(private val spendDao: SpendDao) : ViewModel() {
 
-    private val now: Long = startOfDay(System.currentTimeMillis())
+    /**
+     * Today, as state rather than captured once: it bounds forward navigation and caps the
+     * counted range, both of which would be wrong after midnight with the app left open.
+     */
+    private val _now = MutableStateFlow(startOfDay(System.currentTimeMillis()))
 
     private val _period = MutableStateFlow(SpendPeriod.MONTH)
-    private val _anchor = MutableStateFlow(normalise(SpendPeriod.MONTH, now))
+    private val _anchor = MutableStateFlow(normalise(SpendPeriod.MONTH, _now.value))
 
     val uiState: StateFlow<MoneySpentUiState> =
-        combine(_period, _anchor) { period, anchor -> period to anchor }
-            .flatMapLatest { (period, anchor) ->
+        combine(_period, _anchor, _now) { period, anchor, now -> Triple(period, anchor, now) }
+            .flatMapLatest { (period, anchor, now) ->
                 // Never count days that have not happened yet.
                 val counted = countedRange(period, anchor, now)
                 val totals = if (counted == null) {
@@ -83,8 +87,8 @@ class MoneySpentViewModel(private val spendDao: SpendDao) : ViewModel() {
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
                 initialValue = MoneySpentUiState(
-                    anchor = normalise(SpendPeriod.MONTH, now),
-                    label = labelOf(SpendPeriod.MONTH, now),
+                    anchor = normalise(SpendPeriod.MONTH, _now.value),
+                    label = labelOf(SpendPeriod.MONTH, _now.value),
                 ),
             )
 
@@ -95,16 +99,24 @@ class MoneySpentViewModel(private val spendDao: SpendDao) : ViewModel() {
         _anchor.value = normalise(period, current)
     }
 
+    /** Moves "today" if the app was left open across midnight. */
+    fun refreshNow() {
+        val today = startOfDay(System.currentTimeMillis())
+        if (_now.value != today) {
+            _now.value = today
+        }
+    }
+
     fun goBack() {
         val period = _period.value
-        if (canGoBack(period, _anchor.value, now)) {
+        if (canGoBack(period, _anchor.value, _now.value)) {
             _anchor.value = normalise(period, shift(period, _anchor.value, -1))
         }
     }
 
     fun goForward() {
         val period = _period.value
-        if (canGoForward(period, _anchor.value, now)) {
+        if (canGoForward(period, _anchor.value, _now.value)) {
             _anchor.value = normalise(period, shift(period, _anchor.value, 1))
         }
     }

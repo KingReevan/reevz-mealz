@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.reevan.reevzmealz.util.RETAINED_MONTHS
 import com.reevan.reevzmealz.util.formatPaise
@@ -43,6 +44,11 @@ fun MoneySpentScreen(
     viewModel: MoneySpentViewModel = viewModel(factory = MoneySpentViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsState()
+
+    LifecycleResumeEffect(Unit) {
+        viewModel.refreshNow()
+        onPauseOrDispose { }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         SingleChoiceSegmentedButtonRow(
