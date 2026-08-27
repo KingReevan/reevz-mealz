@@ -1,0 +1,159 @@
+package com.reevan.reevzmealz.ui.plan
+
+import android.app.Application
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.reevan.reevzmealz.data.Food
+import com.reevan.reevzmealz.data.FoodDao
+import com.reevan.reevzmealz.data.MealDatabase
+import com.reevan.reevzmealz.data.MealType
+import com.reevan.reevzmealz.data.PlannedMeal
+import com.reevan.reevzmealz.data.PlannedMealDao
+import com.reevan.reevzmealz.ui.common.PlanSlot
+import com.reevan.reevzmealz.ui.common.buildSlots
+import com.reevan.reevzmealz.ui.common.totalCostPaise
+import com.reevan.reevzmealz.util.addMonths
+import com.reevan.reevzmealz.util.startOfDay
+import com.reevan.reevzmealz.util.startOfMonth
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+data class PlanUiState(
+    val slots: List<PlanSlot> = emptyList(),
+    val totalPaise: Long = 0L,
+    val loaded: Boolean = false,
+)
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class PlanMealViewModel(
+    private val plannedMealDao: PlannedMealDao,
+    foodDao: FoodDao,
+) : ViewModel() {
+
+    val today: Long = startOfDay(System.currentTimeMillis())
+
+    private val _selectedDay = MutableStateFlow(today)
+    val selectedDay: StateFlow<Long> = _selectedDay.asStateFlow()
+
+    /** Which month or week the picker is showing; moves independently of the selected day. */
+    private val _anchorDay = MutableStateFlow(today)
+    val anchorDay: StateFlow<Long> = _anchorDay.asStateFlow()
+
+    val uiState: StateFlow<PlanUiState> =
+        _selectedDay
+            .flatMapLatest { day -> plannedMealDao.observeDay(day) }
+            .map { planned ->
+                val slots = buildSlots(planned)
+                PlanUiState(
+                    slots = slots,
+                    totalPaise = totalCostPaise(slots),
+                    loaded = true,
+                )
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+                initialValue = PlanUiState(),
+            )
+
+    /**
+     * Days with a plan, over a window generously spanning the visible month so both picker modes
+     * are covered without re-querying as the week strip moves inside a month.
+     */
+    val plannedDays: StateFlow<Set<Long>> =
+        _anchorDay
+            .flatMapLatest { anchor ->
+                plannedMealDao.observePlannedDays(
+                    start = addMonths(startOfMonth(anchor), -1),
+                    endExclusive = addMonths(startOfMonth(anchor), 2),
+                )
+            }
+            .map { it.toSet() }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+                initialValue = emptySet(),
+            )
+
+    private val allFoods: StateFlow<List<Food>> =
+        foodDao.observeAll()
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+                initialValue = emptyList(),
+            )
+
+    val anyFoodsExist: StateFlow<Boolean> =
+        allFoods
+            .map { it.isNotEmpty() }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+                initialValue = false,
+            )
+
+    /** Foods assignable to [type] on the selected day: everything not already in that slot. */
+    fun assignableFoods(type: MealType): StateFlow<List<Food>> =
+        combine(allFoods, uiState) { foods, state ->
+            val taken = state.slots.firstOrNull { it.type == type }
+                ?.foods
+                ?.map { it.foodId }
+                ?.toSet()
+                .orEmpty()
+            foods.filterNot { taken.contains(it.id) }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = emptyList(),
+        )
+
+    fun selectDay(dayStart: Long) {
+        _selectedDay.value = startOfDay(dayStart)
+    }
+
+    fun moveAnchor(dayStart: Long) {
+        _anchorDay.value = startOfDay(dayStart)
+    }
+
+    fun assignFood(type: MealType, food: Food) {
+        val day = _selectedDay.value
+        viewModelScope.launch {
+            plannedMealDao.insert(
+                PlannedMeal(dayStart = day, type = type, foodId = food.id),
+            )
+        }
+    }
+
+    fun removePlannedFood(plannedMealId: Long) {
+        viewModelScope.launch { plannedMealDao.deleteById(plannedMealId) }
+    }
+
+    fun clearSlot(type: MealType) {
+        val day = _selectedDay.value
+        viewModelScope.launch { plannedMealDao.clearSlot(day, type) }
+    }
+
+    companion object {
+        private const val STOP_TIMEOUT_MILLIS = 5_000L
+
+        val Factory: ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                val application =
+                    this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as Application
+                val database = MealDatabase.getInstance(application)
+                PlanMealViewModel(database.plannedMealDao(), database.foodDao())
+            }
+        }
+    }
+}

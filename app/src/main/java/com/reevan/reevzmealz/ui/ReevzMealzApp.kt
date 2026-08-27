@@ -73,7 +73,9 @@ fun ReevzMealzApp() {
                 .padding(innerPadding),
         ) {
             when (section) {
-                AppSection.TODAY -> TodayScreen()
+                AppSection.TODAY -> TodayScreen(
+                    onGoToPlan = { section = AppSection.PLAN_MEAL },
+                )
                 AppSection.PLAN_MEAL -> PlanMealScreen()
                 AppSection.BOUGHT_ITEMS -> BoughtItemsScreen()
                 AppSection.FOODS -> FoodsScreen()

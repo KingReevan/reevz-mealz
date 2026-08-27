@@ -3,11 +3,15 @@ package com.reevan.reevzmealz.data
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+/**
+ * Declaration order is the order slots appear everywhere in the UI: breakfast, lunch, snack,
+ * dinner. Room stores enums by name, so reordering this is safe for existing rows.
+ */
 enum class MealType(val label: String) {
     BREAKFAST("Breakfast"),
     LUNCH("Lunch"),
-    DINNER("Dinner"),
     SNACK("Snack"),
+    DINNER("Dinner"),
 }
 
 enum class MealPlace(val label: String) {
@@ -15,6 +19,13 @@ enum class MealPlace(val label: String) {
     OUT("Out"),
 }
 
+/**
+ * A meal logged ad hoc, from the original meal-logging flow.
+ *
+ * Superseded by [PlannedMeal]: Today now shows the day's plan rather than typed-in entries, and
+ * nothing in the UI reads this table any more. It stays declared on the database so the table and
+ * any rows already in it are preserved — dropping it would destroy user data.
+ */
 @Entity(tableName = "meals")
 data class Meal(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,

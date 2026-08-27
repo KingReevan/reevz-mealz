@@ -101,12 +101,18 @@ is attached.
 
 ## Current project state
 
-Single Gradle module `:app`, package `com.reevan.reevzmealz`. Milestone 1 (meal logging) is
-implemented: Today's screen lists the day's meals grouped by meal type with a spend / eating-out
-summary strip, and a bottom sheet adds a meal. Room persists everything locally, fully offline.
+Single Gradle module `:app`, package `com.reevan.reevzmealz`. Room persists everything locally,
+fully offline. Target device is a **Nothing Phone (2a)**; `minSdk 24` / `targetSdk 37` covers it.
+
+**Today** shows the current day's *plan*: all four meal slots (breakfast, lunch, snack, dinner),
+what is planned in each, and the day's total pinned at the bottom. It is read-only — planning
+happens in Plan Meal.
+
+**Plan Meal** picks a day (week strip or month grid, toggleable) and fills its four slots with
+foods from the Foods section. Several foods per slot. Full CRUD over assignments.
 
 The app shell has six top-level sections in a bottom navigation bar: **Today, Plan Meal, Bought
-Items, Foods, Money Spent, Settings**. Today, Foods and Bought Items are built; Plan Meal, Money
+Items, Foods, Money Spent, Settings**. Today, Plan Meal, Bought Items and Foods are built; Money
 Spent and Settings are placeholders awaiting their specs.
 
 **Foods** holds atomic food items — name, a Homecooked/Outside toggle, and a price that only
@@ -120,8 +126,10 @@ month's total, then one card per purchase, newest first. Full CRUD.
 app/src/main/java/com/reevan/reevzmealz/
 ├── MainActivity.kt              single ComponentActivity, hosts ReevzMealzApp
 ├── data/
-│   ├── Meal.kt                  @Entity + MealType / MealPlace enums
-│   ├── MealDao.kt               observeInRange(Flow), insert
+│   ├── Meal.kt                  MealType / MealPlace enums + superseded @Entity (see below)
+│   ├── MealDao.kt               unused; kept so the meals table survives
+│   ├── PlannedMeal.kt           @Entity (day, slot, foodId) + PlannedFood join POJO
+│   ├── PlannedMealDao.kt        observeDay(Flow), observePlannedDays, insert, delete, clearSlot
 │   ├── Food.kt                  @Entity, atomic food item, nullable pricePaise
 │   ├── FoodDao.kt               observeAll(Flow), insert, update, delete
 │   ├── BoughtItem.kt            @Entity, a purchase: name, pricePaise, boughtAt
@@ -131,18 +139,19 @@ app/src/main/java/com/reevan/reevzmealz/
 │   ├── AppSection.kt            the six sections: title, tab label, icon
 │   ├── ReevzMealzApp.kt         shell: the one Scaffold + bottom NavigationBar
 │   ├── common/
+│   │   ├── PlanSlots.kt          PlanSlot + buildSlots/totalCostPaise (the cost rules)
 │   │   └── SectionPlaceholder.kt  stand-in body for unbuilt sections
 │   ├── theme/                   Theme.kt, Color.kt, Type.kt
-│   ├── today/                   built: TodayScreen, TodayViewModel, AddMealSheet
+│   ├── today/                   built: TodayScreen, TodayViewModel
 │   ├── foods/                    built: FoodsScreen, FoodsViewModel, FoodEditorSheet
 │   ├── bought/                   built: BoughtItemsScreen/ViewModel, editor, MonthGrouping
-│   ├── plan/                    placeholder
+│   ├── plan/                     built: PlanMealScreen/ViewModel, DayPicker, FoodPickerSheet
 │   ├── money/                   placeholder
 │   └── settings/                placeholder
 └── util/
     ├── Money.kt                 paise <-> "₹420.50", editable-field rendering
     ├── FoodFormat.kt            food source labels and row subtitles
-    └── Dates.kt                 day boundaries, month keys/labels, via Calendar
+    └── Dates.kt                 day/week/month boundaries and grids, via Calendar
 ```
 
 Conventions set in milestone 1 — keep following them:
@@ -151,6 +160,19 @@ Conventions set in milestone 1 — keep following them:
   `BoughtItem.pricePaise`). Never a `Float` or `Double`.
 - **`MealPlace` (HOME / OUT) is shared** by `Meal.place` and `Food.source` — it is the same
   distinction, so there is no parallel enum. The Foods UI labels it "Homecooked" / "Outside".
+- **The cost rule lives in one place: `ui/common/PlanSlots.kt`.** Only food bought outside counts
+  towards a slot or day total. Homecooked food contributes nothing — its real cost varies and is
+  tracked through Bought Items instead. `PlanSlot.costPaise` filters on `MealPlace.OUT` rather
+  than trusting `pricePaise` to be null, so a stray price cannot leak into a total. Do not
+  re-derive this logic in a screen.
+- **`MealType` declaration order is the UI order**: breakfast, lunch, snack, dinner. Room stores
+  enums by name, so reordering is safe for existing rows — but never rely on `ordinal`.
+- **The ad-hoc meal log is superseded.** `Meal` / `MealDao` are still declared on the database so
+  the `meals` table and its rows are preserved, but nothing in the UI reads them. Do not "tidy
+  up" by removing the entity: that would drop the table and destroy data.
+- A plan row is `(dayStart, type, foodId)` with `dayStart` at local midnight, a unique index so
+  the same food cannot land twice in one slot, and `onDelete = CASCADE` so deleting a food
+  removes it from every plan rather than orphaning rows.
 - **A homecooked food has `pricePaise = null`**, not zero. `FoodsViewModel.save` nulls it out on
   save so a price typed before flipping the toggle cannot leak through.
 - Destructive actions confirm first: deleting a food goes through an `AlertDialog`.
