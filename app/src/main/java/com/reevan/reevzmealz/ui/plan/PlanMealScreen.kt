@@ -12,24 +12,21 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.reevan.reevzmealz.data.MealPlace
-import com.reevan.reevzmealz.data.MealType
-import com.reevan.reevzmealz.data.SlotFood
 import com.reevan.reevzmealz.ui.common.FoodPickerSheet
-import com.reevan.reevzmealz.ui.common.PlanSlot
+import com.reevan.reevzmealz.ui.common.AddFoodAction
+import com.reevan.reevzmealz.ui.common.ClearSlotAction
+import com.reevan.reevzmealz.ui.common.MealSlotCard
 import com.reevan.reevzmealz.util.formatDayHeading
 import com.reevan.reevzmealz.util.formatPaise
 
@@ -87,11 +84,18 @@ fun PlanMealScreen(
                 key = { index -> state.slots[index].type.name },
             ) { index ->
                 val slot = state.slots[index]
-                SlotEditor(
+                MealSlotCard(
                     slot = slot,
-                    onAddFood = { viewModel.openPicker(slot.type) },
+                    // Plan Meal always shows plan rows, so removal is always safe here.
+                    canRemove = true,
                     onRemoveFood = viewModel::removeSlotFood,
-                    onClearSlot = { viewModel.clearSlot(slot.type) },
+                    emptyText = "No food",
+                    actions = {
+                        AddFoodAction { viewModel.openPicker(slot.type) }
+                        if (!slot.isEmpty) {
+                            ClearSlotAction("Clear") { viewModel.clearSlot(slot.type) }
+                        }
+                    },
                 )
             }
         }
@@ -112,103 +116,6 @@ fun PlanMealScreen(
                 viewModel.closePicker()
             },
         )
-    }
-}
-
-@Composable
-private fun SlotEditor(
-    slot: PlanSlot,
-    onAddFood: () -> Unit,
-    onRemoveFood: (Long) -> Unit,
-    onClearSlot: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = slot.type.label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
-            )
-            if (!slot.isEmpty && !slot.isFullyHomecooked) {
-                Text(
-                    text = formatPaise(slot.costPaise),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        if (slot.isEmpty) {
-            Text(
-                text = "No food",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-        } else {
-            slot.foods.forEach { food ->
-                SlotFoodRow(food = food, onRemove = { onRemoveFood(food.entryId) })
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(
-                onClick = onAddFood,
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) {
-                Text("+ Add food")
-            }
-            if (!slot.isEmpty) {
-                TextButton(
-                    onClick = onClearSlot,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    Text(text = "Clear", color = MaterialTheme.colorScheme.error)
-                }
-            }
-        }
-        HorizontalDivider()
-    }
-}
-
-@Composable
-private fun SlotFoodRow(food: SlotFood, onRemove: () -> Unit) {
-    val isOutside = food.source == MealPlace.OUT
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = food.name,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = if (isOutside) formatPaise((food.pricePaise ?: 0).toLong()) else "Homecooked",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (isOutside) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
-        TextButton(onClick = onRemove) {
-            Text(text = "✕", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
     }
 }
 

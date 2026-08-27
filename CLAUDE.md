@@ -211,6 +211,14 @@ Conventions set in milestone 1 — keep following them:
   `SecurityException` catch handles revocation between check and post.
 - The manifest carries `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED` and two receivers. The boot
   receiver is `exported="false"`, which is correct — only the system sends `BOOT_COMPLETED`.
+- **Meal slots are one shared composable: `ui/common/MealSlotCard.kt`.** Centre-aligned card with
+  emoji, slot name at 20sp bold, a cost pill, then the foods with a chip each — red chip for a
+  price, plain for homecooked. Meal emoji come from the system font, so no icon or font asset is
+  involved. Today and Plan Meal both render it and differ only via `actions`, `emptyText` and
+  `supportingLine`; do not fork it, or the two screens will drift.
+- `MealSlotCard(canRemove = ...)` must be false whenever the rows shown did not come from the
+  table the caller's remove writes to. Plan Meal passes `true` (always plan rows); Today passes
+  `editMode && dayLogged`.
 - **The kid-friendly look comes from shape and type, not colour.** Material You dynamic colour is
   deliberately kept, so the palette follows the wallpaper; `ReevzShapes` (rounder than Material's
   defaults) and the enlarged `Typography` are what carry the friendly feel, and they reach every

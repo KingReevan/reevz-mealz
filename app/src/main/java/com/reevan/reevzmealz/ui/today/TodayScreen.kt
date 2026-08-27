@@ -21,21 +21,20 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.reevan.reevzmealz.data.MealPlace
-import com.reevan.reevzmealz.data.MealType
-import com.reevan.reevzmealz.data.SlotFood
+import com.reevan.reevzmealz.ui.common.AddFoodAction
+import com.reevan.reevzmealz.ui.common.ClearSlotAction
 import com.reevan.reevzmealz.ui.common.FoodPickerSheet
-import com.reevan.reevzmealz.ui.common.PlanSlot
+import com.reevan.reevzmealz.ui.common.MealSlotCard
 import com.reevan.reevzmealz.ui.sin.DayAlreadyEndedDialog
 import com.reevan.reevzmealz.ui.sin.EndDayDialog
 import com.reevan.reevzmealz.ui.sin.SinViewModel
@@ -105,19 +104,29 @@ fun TodayScreen(
                         key = { index -> state.slots[index].type.name },
                     ) { index ->
                         val slot = state.slots[index]
-                        SlotBlock(
+                        MealSlotCard(
                             slot = slot,
-                            plannedNames = if (state.dayLogged) {
-                                state.plannedFoodNames(slot.type)
-                            } else {
-                                emptyList()
-                            },
-                            showPlannedLine = state.dayLogged,
-                            editMode = editMode,
                             canRemove = canRemove,
-                            onAddFood = { viewModel.openPicker(slot.type) },
                             onRemoveFood = viewModel::removeFood,
-                            onClearSlot = { viewModel.clearSlot(slot.type) },
+                            supportingLine = if (state.dayLogged) {
+                                "Planned: " + state.plannedFoodNames(slot.type)
+                                    .ifEmpty { listOf("nothing") }
+                                    .joinToString(", ")
+                            } else {
+                                null
+                            },
+                            actions = if (editMode) {
+                                {
+                                    AddFoodAction { viewModel.openPicker(slot.type) }
+                                    if (!slot.isEmpty) {
+                                        ClearSlotAction("Ate nothing") {
+                                            viewModel.clearSlot(slot.type)
+                                        }
+                                    }
+                                }
+                            } else {
+                                null
+                            },
                         )
                     }
 
@@ -206,125 +215,6 @@ private fun EditModeHeader(
             )
         }
         Switch(checked = editMode, onCheckedChange = onEditModeChange)
-    }
-}
-
-@Composable
-private fun SlotBlock(
-    slot: PlanSlot,
-    plannedNames: List<String>,
-    showPlannedLine: Boolean,
-    editMode: Boolean,
-    canRemove: Boolean,
-    onAddFood: () -> Unit,
-    onRemoveFood: (Long) -> Unit,
-    onClearSlot: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = slot.type.label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
-            )
-            // Only a slot containing outside food has a price worth showing.
-            if (!slot.isEmpty && !slot.isFullyHomecooked) {
-                Text(
-                    text = formatPaise(slot.costPaise),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        // Once the day has its own record, show what was originally planned for reference.
-        if (showPlannedLine) {
-            Text(
-                text = "Planned: " + plannedNames.ifEmpty { listOf("nothing") }.joinToString(", "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
-            )
-        }
-
-        if (slot.isEmpty) {
-            Text(
-                text = "No food",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-        } else {
-            slot.foods.forEach { food ->
-                SlotFoodRow(
-                    food = food,
-                    canRemove = canRemove,
-                    onRemove = { onRemoveFood(food.entryId) },
-                )
-            }
-        }
-
-        if (editMode) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(
-                    onClick = onAddFood,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    Text("+ Add food")
-                }
-                if (!slot.isEmpty) {
-                    TextButton(
-                        onClick = onClearSlot,
-                        modifier = Modifier.heightIn(min = 48.dp),
-                    ) {
-                        Text(text = "Ate nothing", color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SlotFoodRow(food: SlotFood, canRemove: Boolean, onRemove: () -> Unit) {
-    val isOutside = food.source == MealPlace.OUT
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .padding(start = 16.dp, end = if (canRemove) 4.dp else 16.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = food.name,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = if (isOutside) formatPaise((food.pricePaise ?: 0).toLong()) else "Homecooked",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (isOutside) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
-        if (canRemove) {
-            TextButton(onClick = onRemove) {
-                Text(text = "✕", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
     }
 }
 
