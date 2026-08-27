@@ -2,7 +2,7 @@ package com.reevan.reevzmealz
 
 import com.reevan.reevzmealz.data.MealPlace
 import com.reevan.reevzmealz.data.MealType
-import com.reevan.reevzmealz.data.PlannedFood
+import com.reevan.reevzmealz.data.SlotFood
 import com.reevan.reevzmealz.ui.common.buildSlots
 import com.reevan.reevzmealz.ui.common.totalCostPaise
 import org.junit.Assert.assertEquals
@@ -18,8 +18,8 @@ class PlanSlotsTest {
         name: String,
         source: MealPlace,
         pricePaise: Int?,
-    ) = PlannedFood(
-        plannedMealId = id,
+    ) = SlotFood(
+        entryId = id,
         type = type,
         foodId = id,
         name = name,

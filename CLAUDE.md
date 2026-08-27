@@ -104,9 +104,11 @@ is attached.
 Single Gradle module `:app`, package `com.reevan.reevzmealz`. Room persists everything locally,
 fully offline. Target device is a **Nothing Phone (2a)**; `minSdk 24` / `targetSdk 37` covers it.
 
-**Today** shows the current day's *plan*: all four meal slots (breakfast, lunch, snack, dinner),
-what is planned in each, and the day's total pinned at the bottom. It is read-only — planning
-happens in Plan Meal.
+**Today** shows the current day: all four meal slots (breakfast, lunch, snack, dinner) and the
+day's total pinned at the bottom. Read-only by default, showing the plan. An **Edit Mode** switch
+turns it into a record of what was *actually* eaten — seeded from the plan on first use, then
+freely editable (add foods from Foods, remove them, mark a slot "Ate nothing", or reset the day
+back to the plan). Editing never touches the plan.
 
 **Plan Meal** picks a day (week strip or month grid, toggleable) and fills its four slots with
 foods from the Foods section. Several foods per slot. Full CRUD over assignments.
@@ -128,24 +130,27 @@ app/src/main/java/com/reevan/reevzmealz/
 ├── data/
 │   ├── Meal.kt                  MealType / MealPlace enums + superseded @Entity (see below)
 │   ├── MealDao.kt               unused; kept so the meals table survives
-│   ├── PlannedMeal.kt           @Entity (day, slot, foodId) + PlannedFood join POJO
+│   ├── PlannedMeal.kt           @Entity (day, slot, foodId) + SlotFood join POJO
 │   ├── PlannedMealDao.kt        observeDay(Flow), observePlannedDays, insert, delete, clearSlot
+│   ├── EatenMeal.kt             @Entity actuals + EatenDay marker entity
+│   ├── EatenMealDao.kt          observeDay, observeIsLogged, startLoggingDay, resetDayToPlan
 │   ├── Food.kt                  @Entity, atomic food item, nullable pricePaise
 │   ├── FoodDao.kt               observeAll(Flow), insert, update, delete
 │   ├── BoughtItem.kt            @Entity, a purchase: name, pricePaise, boughtAt
 │   ├── BoughtItemDao.kt         observeAll(Flow), insert, update, delete
-│   └── MealDatabase.kt          @Database v3, singleton, exportSchema, autoMigrations
+│   └── MealDatabase.kt          @Database v5, singleton, exportSchema, autoMigrations
 ├── ui/
 │   ├── AppSection.kt            the six sections: title, tab label, icon
 │   ├── ReevzMealzApp.kt         shell: the one Scaffold + bottom NavigationBar
 │   ├── common/
-│   │   ├── PlanSlots.kt          PlanSlot + buildSlots/totalCostPaise (the cost rules)
+│   │   ├── PlanSlots.kt          PlanSlot, buildSlots/totalCostPaise, effectiveSlots
+│   │   ├── FoodPickerSheet.kt    shared food picker (Today + Plan Meal)
 │   │   └── SectionPlaceholder.kt  stand-in body for unbuilt sections
 │   ├── theme/                   Theme.kt, Color.kt, Type.kt
 │   ├── today/                   built: TodayScreen, TodayViewModel
 │   ├── foods/                    built: FoodsScreen, FoodsViewModel, FoodEditorSheet
 │   ├── bought/                   built: BoughtItemsScreen/ViewModel, editor, MonthGrouping
-│   ├── plan/                     built: PlanMealScreen/ViewModel, DayPicker, FoodPickerSheet
+│   ├── plan/                     built: PlanMealScreen/ViewModel, DayPicker
 │   ├── money/                   placeholder
 │   └── settings/                placeholder
 └── util/
@@ -172,7 +177,17 @@ Conventions set in milestone 1 — keep following them:
   up" by removing the entity: that would drop the table and destroy data.
 - A plan row is `(dayStart, type, foodId)` with `dayStart` at local midnight, a unique index so
   the same food cannot land twice in one slot, and `onDelete = CASCADE` so deleting a food
-  removes it from every plan rather than orphaning rows.
+  removes it from every plan rather than orphaning rows. `eaten_meals` has the same shape.
+- **Plan and actuals are separate tables.** `planned_meals` is the intention and is never
+  rewritten by Today; `eaten_meals` is what happened. `SlotFood` is the shared join POJO for
+  both, which is why it is not called `PlannedFood`.
+- **`eaten_days` is load-bearing, not redundant.** Without it, a day with no eaten rows would be
+  ambiguous between "not edited yet, so assume the plan" and "edited, and I skipped everything".
+  Its presence means the eaten rows are authoritative *even when empty*, which is how a skipped
+  meal avoids inflating the day's cost. `effectiveSlots` in `PlanSlots.kt` encodes that choice —
+  do not re-derive it in a screen.
+- Switching Edit Mode on calls `startLoggingDay`, which copies that day's plan into the eaten
+  table once. It is idempotent, so every edit action can safely call it first.
 - **A homecooked food has `pricePaise = null`**, not zero. `FoodsViewModel.save` nulls it out on
   save so a price typed before flipping the toggle cannot leak through.
 - Destructive actions confirm first: deleting a food goes through an `AlertDialog`.

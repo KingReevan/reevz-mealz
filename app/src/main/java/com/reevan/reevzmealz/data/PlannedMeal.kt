@@ -6,7 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * One food assigned to one meal slot on one day.
+ * One food assigned to one meal slot on one day — what was *planned*.
  *
  * A slot holds several foods, so this is a row per (day, slot, food) rather than a row per slot.
  *
@@ -42,13 +42,14 @@ data class PlannedMeal(
 )
 
 /**
- * A planned food joined with the food's own details, which is what the UI needs: the name to
- * show and the price to add up.
+ * A food sitting in a meal slot, joined with the food's own details — the name to show and the
+ * price to add up. Used for both planned and eaten rows, so [entryId] is the id of whichever
+ * row produced it.
  *
  * [pricePaise] is null for homecooked food — its cost is tracked through Bought Items instead.
  */
-data class PlannedFood(
-    val plannedMealId: Long,
+data class SlotFood(
+    val entryId: Long,
     val type: MealType,
     val foodId: Long,
     val name: String,

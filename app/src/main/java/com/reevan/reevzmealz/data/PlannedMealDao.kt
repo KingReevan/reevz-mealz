@@ -14,13 +14,13 @@ interface PlannedMealDao {
      * Ordered by name so a slot's contents stay stable as foods are added and removed.
      */
     @Query(
-        "SELECT pm.id AS plannedMealId, pm.type AS type, f.id AS foodId, f.name AS name, " +
+        "SELECT pm.id AS entryId, pm.type AS type, f.id AS foodId, f.name AS name, " +
             "f.source AS source, f.pricePaise AS pricePaise " +
             "FROM planned_meals pm INNER JOIN foods f ON f.id = pm.foodId " +
             "WHERE pm.dayStart = :dayStart " +
             "ORDER BY f.name COLLATE NOCASE ASC"
     )
-    fun observeDay(dayStart: Long): Flow<List<PlannedFood>>
+    fun observeDay(dayStart: Long): Flow<List<SlotFood>>
 
     /** Days in [start, endExclusive) that have anything planned, for marking the day picker. */
     @Query(

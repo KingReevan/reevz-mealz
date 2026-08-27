@@ -26,7 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.reevan.reevzmealz.data.MealPlace
 import com.reevan.reevzmealz.data.MealType
-import com.reevan.reevzmealz.data.PlannedFood
+import com.reevan.reevzmealz.data.SlotFood
+import com.reevan.reevzmealz.ui.common.FoodPickerSheet
 import com.reevan.reevzmealz.ui.common.PlanSlot
 import com.reevan.reevzmealz.util.formatDayHeading
 import com.reevan.reevzmealz.util.formatPaise
@@ -79,7 +80,7 @@ fun PlanMealScreen(
                 SlotEditor(
                     slot = slot,
                     onAddFood = { pickerForSlot = slot.type },
-                    onRemoveFood = viewModel::removePlannedFood,
+                    onRemoveFood = viewModel::removeSlotFood,
                     onClearSlot = { viewModel.clearSlot(slot.type) },
                 )
             }
@@ -142,7 +143,7 @@ private fun SlotEditor(
             )
         } else {
             slot.foods.forEach { food ->
-                PlannedFoodRow(food = food, onRemove = { onRemoveFood(food.plannedMealId) })
+                SlotFoodRow(food = food, onRemove = { onRemoveFood(food.entryId) })
             }
         }
 
@@ -172,7 +173,7 @@ private fun SlotEditor(
 }
 
 @Composable
-private fun PlannedFoodRow(food: PlannedFood, onRemove: () -> Unit) {
+private fun SlotFoodRow(food: SlotFood, onRemove: () -> Unit) {
     val isOutside = food.source == MealPlace.OUT
     Row(
         modifier = Modifier

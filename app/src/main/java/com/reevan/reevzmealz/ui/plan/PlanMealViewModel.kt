@@ -135,8 +135,8 @@ class PlanMealViewModel(
         }
     }
 
-    fun removePlannedFood(plannedMealId: Long) {
-        viewModelScope.launch { plannedMealDao.deleteById(plannedMealId) }
+    fun removeSlotFood(entryId: Long) {
+        viewModelScope.launch { plannedMealDao.deleteById(entryId) }
     }
 
     fun clearSlot(type: MealType) {
