@@ -109,8 +109,10 @@ Single Gradle module `:app`, package `com.reevan.reevzmealz`. Room persists ever
 fully offline. Target device is a **Nothing Phone (2a)**; `minSdk 24` / `targetSdk 37` covers it.
 
 **Today** shows the current day: all four meal slots (breakfast, lunch, snack, dinner) and the
-day's total pinned at the bottom. Read-only by default, showing the plan. An **Edit Mode** switch
-turns it into a record of what was *actually* eaten — seeded from the plan on first use, then
+day's total pinned at the bottom. **All four slots must be visible without scrolling** — that is a
+hard requirement, and it is why the slots are compact and why Edit Mode and End day share the
+header rather than taking a row each. Read-only by default, showing the plan. An **Edit Mode**
+switch turns it into a record of what was *actually* eaten — seeded from the plan on first use, then
 freely editable (add foods from Foods, remove them, mark a slot "Ate nothing", or reset the day
 back to the plan). Editing never touches the plan.
 
@@ -141,7 +143,7 @@ tomorrow has *nothing* planned at all.
 **Sins** are the discipline mechanic. One sin = one meal that did not go to plan. The allowance
 (default 40) is per calendar month and configurable, but **locked for 3 days after being set** so
 it cannot be raised the moment it pinches. Remaining sins show in the top-right of every screen.
-An **End day** button on Today opens a dialog with a toggle per meal slot — positive means
+An **End day** button in Today's header opens a dialog with a toggle per meal slot — positive means
 "Good Job!" in green, negative means "This is bad!" in red and costs a sin. Confirming settles the
 day permanently. At zero the dialog is headed "You have failed for the month".
 
@@ -211,11 +213,21 @@ Conventions set in milestone 1 — keep following them:
   `SecurityException` catch handles revocation between check and post.
 - The manifest carries `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED` and two receivers. The boot
   receiver is `exported="false"`, which is correct — only the system sends `BOOT_COMPLETED`.
-- **Meal slots are one shared composable: `ui/common/MealSlotCard.kt`.** Centre-aligned card with
-  emoji, slot name at 20sp bold, a cost pill, then the foods with a chip each — red chip for a
-  price, plain for homecooked. Meal emoji come from the system font, so no icon or font asset is
-  involved. Today and Plan Meal both render it and differ only via `actions`, `emptyText` and
-  `supportingLine`; do not fork it, or the two screens will drift.
+- **Meal slots are one shared composable: `ui/common/MealSlotCard.kt`.** Centre-aligned, with the
+  slot name at 20sp bold and its cost pill on one line, then the foods with a chip each — red chip
+  for a price, plain for homecooked. Today and Plan Meal both render it and differ only via
+  `actions`, `emptyText` and `supportingLine`; do not fork it, or the two screens will drift.
+- **The slots are full-bleed rectangles with no gap, closed by a divider — not `Card`s.** A Card's
+  insets, corners and inter-card gaps cost roughly a fifth of the list height, which is what was
+  pushing dinner off the screen. The list container carries the same `surfaceVariant` background as
+  the slots so the space below dinner reads as the end of one panel rather than a gap. There are
+  deliberately **no emoji** on the slots.
+- Today's header carries the day, the Edit Mode switch and **End day** on one line. End day was a
+  full-width footer button; between it and the taller cards, dinner did not fit. Do not move it
+  back to the footer, and keep the header labels short ("Editing", not "Editing what you ate") —
+  the row has about 200dp for them before the switch and button.
+- Today's `supportingLine` appears **only when something was actually planned**. "Planned: nothing"
+  was a wasted line in all four slots on an unplanned day.
 - `MealSlotCard(canRemove = ...)` must be false whenever the rows shown did not come from the
   table the caller's remove writes to. Plan Meal passes `true` (always plan rows); Today passes
   `editMode && dayLogged`.

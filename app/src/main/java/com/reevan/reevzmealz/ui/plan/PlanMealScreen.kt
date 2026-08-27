@@ -1,5 +1,6 @@
 package com.reevan.reevzmealz.ui.plan
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -70,14 +71,16 @@ fun PlanMealScreen(
             text = "Planning " + formatDayHeading(selectedDay),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
         )
 
         LazyColumn(
+            // Matches Today: the slots and the space below them are one continuous panel.
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(bottom = 16.dp),
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentPadding = PaddingValues(bottom = 8.dp),
         ) {
             items(
                 count = state.slots.size,

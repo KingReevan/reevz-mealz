@@ -1,13 +1,12 @@
 package com.reevan.reevzmealz.ui.common
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -21,27 +20,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reevan.reevzmealz.data.MealPlace
-import com.reevan.reevzmealz.data.MealType
 import com.reevan.reevzmealz.data.SlotFood
 import com.reevan.reevzmealz.util.formatPaise
 
-/** A playful glyph per slot. System emoji, so no font or icon asset is needed. */
-val MealType.emoji: String
-    get() = when (this) {
-        MealType.BREAKFAST -> "🍳"
-        MealType.LUNCH -> "🍛"
-        MealType.SNACK -> "🍪"
-        MealType.DINNER -> "🍲"
-    }
-
 /**
- * One meal slot as a centre-aligned card: emoji, name and cost at the top, then the foods in it.
+ * One meal slot: its name and cost centred on a single line, then the foods in it.
+ *
+ * Full-bleed and rectangular, with a divider closing it off, so the four slots read as one
+ * continuous list rather than four floating cards. That is deliberate: all four slots have to fit
+ * on screen at once, and a Card's gaps and rounded insets cost height without adding information.
  *
  * Shared by Today and Plan Meal so the two cannot drift apart visually. The screens differ only
  * in their [actions] and in whether removal is offered, which is what those parameters are for.
  *
- * [canRemove] must be false whenever the rows on screen did not come from the table the caller's
- * remove goes to — on Today that means before the day is logged.
+ * [canRemove] must be false whenever the rows on screen did not come from the table the remove
+ * callback writes to — on Today that means before the day is logged.
  */
 @Composable
 fun MealSlotCard(
@@ -53,33 +46,33 @@ fun MealSlotCard(
     emptyText: String = "Nothing yet",
     actions: (@Composable () -> Unit)? = null,
 ) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(text = slot.type.emoji, fontSize = 26.sp)
-
-            Text(
-                text = slot.type.label,
-                style = MaterialTheme.typography.titleMedium,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center,
-            )
-
-            SlotCostPill(slot = slot)
+            // Name and cost share a line; stacked, they alone were taller than a whole slot needs.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = slot.type.label,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
+                )
+                SlotCostPill(slot = slot)
+            }
 
             if (supportingLine != null) {
                 Text(
@@ -96,13 +89,8 @@ fun MealSlotCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 2.dp),
                 )
             } else {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant,
-                )
                 slot.foods.forEach { food ->
                     SlotFoodRow(
                         food = food,
@@ -121,12 +109,14 @@ fun MealSlotCard(
                 }
             }
         }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
 /**
- * The slot's headline figure. A slot of only homecooked food has no price to show, so it says so
- * rather than showing ₹0.
+ * The slot's headline figure, sitting beside its name. A slot of only homecooked food has no price
+ * to show, so it says so rather than showing a zero.
  */
 @Composable
 private fun SlotCostPill(slot: PlanSlot) {
@@ -140,16 +130,17 @@ private fun SlotCostPill(slot: PlanSlot) {
             MaterialTheme.colorScheme.primaryContainer
         },
         shape = MaterialTheme.shapes.small,
+        modifier = Modifier.padding(start = 10.dp),
     ) {
         Text(
             text = if (homecookedOnly) "All homecooked" else formatPaise(slot.costPaise),
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelMedium,
             color = if (homecookedOnly) {
                 MaterialTheme.colorScheme.onSecondaryContainer
             } else {
                 MaterialTheme.colorScheme.onPrimaryContainer
             },
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
         )
     }
 }
@@ -161,7 +152,7 @@ private fun SlotFoodRow(food: SlotFood, canRemove: Boolean, onRemove: () -> Unit
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 44.dp)
+            .heightIn(min = 36.dp)
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,

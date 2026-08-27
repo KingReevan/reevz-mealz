@@ -1,5 +1,6 @@
 package com.reevan.reevzmealz.ui.today
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,6 +83,8 @@ fun TodayScreen(
                 editMode = enabled
                 if (enabled) viewModel.beginEditing()
             },
+            dayEnded = sinState.todayEnded,
+            onEndDay = { showEndDay = true },
         )
         HorizontalDivider()
 
@@ -96,8 +99,12 @@ fun TodayScreen(
                 )
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
+                    // Same colour as the slots, so the space left below dinner reads as the end of
+                    // one panel rather than a gap torn out of it.
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentPadding = PaddingValues(bottom = 8.dp),
                 ) {
                     items(
                         count = state.slots.size,
@@ -108,13 +115,11 @@ fun TodayScreen(
                             slot = slot,
                             canRemove = canRemove,
                             onRemoveFood = viewModel::removeFood,
-                            supportingLine = if (state.dayLogged) {
-                                "Planned: " + state.plannedFoodNames(slot.type)
-                                    .ifEmpty { listOf("nothing") }
-                                    .joinToString(", ")
-                            } else {
-                                null
-                            },
+                            // Only worth a line when there was actually a plan to compare against;
+                            // "Planned: nothing" said nothing and cost a line in every slot.
+                            supportingLine = state.plannedFoodNames(slot.type)
+                                .takeIf { state.dayLogged && it.isNotEmpty() }
+                                ?.let { "Planned: " + it.joinToString(", ") },
                             actions = if (editMode) {
                                 {
                                     AddFoodAction { viewModel.openPicker(slot.type) }
@@ -150,8 +155,6 @@ fun TodayScreen(
             totalPaise = state.totalPaise,
             plannedTotalPaise = state.plannedTotalPaise,
             showPlanned = state.showPlannedComparison,
-            dayEnded = sinState.todayEnded,
-            onEndDay = { showEndDay = true },
         )
     }
 
@@ -190,17 +193,25 @@ fun TodayScreen(
     }
 }
 
+/**
+ * The day, the Edit Mode switch and End day, all on one line.
+ *
+ * End day lives here rather than in the footer because a full-width button down there cost enough
+ * height to push dinner off the screen. It stays within thumb reach of the top-right corner.
+ */
 @Composable
 private fun EditModeHeader(
     dayStart: Long,
     editMode: Boolean,
     onEditModeChange: (Boolean) -> Unit,
+    dayEnded: Boolean,
+    onEndDay: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -208,13 +219,24 @@ private fun EditModeHeader(
                 text = formatDayHeading(dayStart),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
             )
             Text(
-                text = if (editMode) "Editing what you ate" else "Edit mode",
+                text = if (editMode) "Editing" else "Edit mode",
                 style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
             )
         }
         Switch(checked = editMode, onCheckedChange = onEditModeChange)
+        Button(
+            onClick = onEndDay,
+            modifier = Modifier
+                .padding(start = 8.dp)
+                .heightIn(min = 48.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+        ) {
+            Text(text = if (dayEnded) "Ended" else "End day", maxLines = 1)
+        }
     }
 }
 
@@ -224,49 +246,32 @@ private fun DayTotal(
     totalPaise: Long,
     plannedTotalPaise: Long,
     showPlanned: Boolean,
-    dayEnded: Boolean,
-    onEndDay: () -> Unit,
 ) {
     Surface(tonalElevation = 3.dp) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .heightIn(min = 56.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Total",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    if (showPlanned) {
-                        Text(
-                            text = "Planned " + formatPaise(plannedTotalPaise),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = formatPaise(totalPaise),
-                    style = MaterialTheme.typography.titleLarge,
+                    text = "Total",
+                    style = MaterialTheme.typography.titleMedium,
                 )
+                if (showPlanned) {
+                    Text(
+                        text = "Planned " + formatPaise(plannedTotalPaise),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-
-            // Kept in the footer so it stays in the thumb zone.
-            Button(
-                onClick = onEndDay,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-            ) {
-                Text(if (dayEnded) "Day ended" else "End day")
-            }
+            Text(
+                text = formatPaise(totalPaise),
+                style = MaterialTheme.typography.titleLarge,
+            )
         }
     }
 }
