@@ -1,27 +1,9 @@
 package com.reevan.reevzmealz.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
 import com.reevan.reevzmealz.data.ThemeMode
-
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80,
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
-)
 
 /**
  * Resolves [ThemeMode] against the system setting.
@@ -36,29 +18,22 @@ fun ThemeMode.isDark(): Boolean = when (this) {
 }
 
 /**
- * Material You dynamic colour is kept on (API 31+), so the palette follows the wallpaper. The
- * kid-friendly feel comes from [ReevzShapes] and [Typography] instead, which apply on every
- * device regardless of what colours the system hands back.
+ * The retro arcade theme: a fixed pink / yellow / blue palette, square corners and a monospace
+ * face, so every screen reads as one game HUD.
+ *
+ * **Material You dynamic colour is deliberately off.** It used to be on, so the palette followed
+ * the wallpaper — but the look is now defined by three specific colours, and a wallpaper-derived
+ * scheme would repaint the app in whatever the phone's background happens to be. Dynamic colour
+ * and a named palette cannot both be in charge; the named palette wins. There is no `dynamicColor`
+ * flag any more, so this cannot be half-enabled by accident.
  */
 @Composable
 fun ReevzMealzTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
-    dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val darkTheme = themeMode.isDark()
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = if (themeMode.isDark()) DarkScheme else LightScheme,
         shapes = ReevzShapes,
         typography = Typography,
         content = content,

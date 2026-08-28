@@ -79,8 +79,8 @@ is attached.
 - Prioritize clarity and ease of use over visual complexity.
 - Avoid unnecessary screens and navigation. Fewer taps to log a meal is the goal.
 - Use Jetpack Compose and Material 3.
-- Support **light and dark themes** — the existing `ReevzMealzTheme` already handles dynamic color
-  and light/dark, so route new UI through it.
+- Support **light and dark themes** — `ReevzMealzTheme` owns the retro palette for both, so route
+  new UI through it and use colour *roles*, never hardcoded colours.
 - Use accessible touch targets (48dp minimum) and readable typography.
 
 ## Data guidelines
@@ -117,10 +117,13 @@ freely editable (add foods from Foods, remove them, mark a slot "Ate nothing", o
 back to the plan). Editing never touches the plan.
 
 **Plan Meal** picks a day (week strip or month grid, toggleable) and fills its four slots with
-foods from the Foods section. Several foods per slot. Full CRUD over assignments.
+foods from the Foods section. Several foods per slot. Full CRUD over assignments. Its slots use
+the **side-by-side** layout — name on the left, foods stacked as blocks on the right — so all four
+fit under the day picker.
 
-The app shell has six top-level sections in a bottom navigation bar: **Today, Plan Meal, Bought
-Items, Foods, Money Spent, Settings**. All six are built.
+The app shell has six top-level sections. Four sit in the bottom navigation bar — **Today, Plan
+Meal, Bought Items, Foods** — and the two occasional ones, **Money Spent** and **Settings**, live
+behind a **pause menu** opened from the ☰ button at the top-left. All six are built.
 
 **Foods** holds atomic food items — name, a Homecooked/Outside toggle, and a price plus a **place**
 (where it was bought) that only apply when Outside. The place shows as a chip on the right of each
@@ -143,7 +146,8 @@ tomorrow has *nothing* planned at all.
 
 **Sins** are the discipline mechanic. One sin = one meal that did not go to plan. The allowance
 (default 40) is per calendar month and configurable, but **locked for 3 days after being set** so
-it cannot be raised the moment it pinches. Remaining sins show in the top-right of every screen.
+it cannot be raised the moment it pinches. Remaining sins show as a **health bar** in the header of
+every screen, draining pink to yellow to red and reading GAME OVER at zero.
 An **End day** button in Today's header opens a dialog with a toggle per meal slot — positive means
 "Good Job!" in green, negative means "This is bad!" in red and costs a sin. Confirming settles the
 day permanently. At zero the dialog is headed "You have failed for the month".
@@ -174,18 +178,19 @@ app/src/main/java/com/reevan/reevzmealz/
 │   ├── PlanReminderReceiver.kt   checks tomorrow, notifies, re-arms
 │   └── BootReceiver.kt           re-arms after reboot
 ├── ui/
-│   ├── AppSection.kt            the six sections: title, tab label, icon
+│   ├── AppSection.kt            the six sections: title, tab label, icon, inBottomBar
+│   ├── PauseMenu.kt             Money Spent + Settings, reached from the header
 │   ├── ReevzMealzApp.kt         shell: the one Scaffold + bottom NavigationBar
 │   ├── common/
 │   │   ├── PlanSlots.kt          PlanSlot, buildSlots/totalCostPaise, effectiveSlots
 │   │   ├── FoodPickerSheet.kt    shared food picker (Today + Plan Meal)
 │   │   └── SectionPlaceholder.kt  stand-in body for unbuilt sections
-│   ├── theme/                   Theme.kt, Color.kt, Type.kt, Shape.kt
+│   ├── theme/                   Theme.kt, Color.kt (retro palette), Type.kt, Shape.kt
 │   ├── today/                   built: TodayScreen, TodayViewModel
 │   ├── foods/                    built: FoodsScreen, FoodsViewModel, FoodEditorSheet
 │   ├── bought/                   built: BoughtItemsScreen/ViewModel, editor, MonthGrouping
 │   ├── plan/                     built: PlanMealScreen/ViewModel, DayPicker
-│   ├── sin/                      SinStatus (rules), SinViewModel, EndDayDialog
+│   ├── sin/                      SinStatus (rules), SinViewModel, EndDayDialog, SinHealthBar
 │   ├── money/                    built: MoneySpentScreen/ViewModel, SpendPeriod
 │   └── settings/                 built: SettingsScreen/ViewModel (retention purge)
 └── util/
@@ -214,10 +219,18 @@ Conventions set in milestone 1 — keep following them:
   `SecurityException` catch handles revocation between check and post.
 - The manifest carries `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED` and two receivers. The boot
   receiver is `exported="false"`, which is correct — only the system sends `BOOT_COMPLETED`.
-- **Meal slots are one shared composable: `ui/common/MealSlotCard.kt`.** Centre-aligned, with the
-  slot name at 20sp bold and its cost pill on one line, then the foods with a chip each — red chip
-  for a price, plain for homecooked. Today and Plan Meal both render it and differ only via
-  `actions`, `emptyText` and `supportingLine`; do not fork it, or the two screens will drift.
+- **Meal slots are one shared composable: `ui/common/MealSlotCard.kt`.** Today and Plan Meal both
+  render it and differ only via `layout`, `actions`, `emptyText` and `supportingLine`; do not fork
+  it, or the two screens will drift.
+- **`SlotLayout` has two modes, and the screens genuinely need different ones.** `CENTRED` (Today)
+  puts the name and cost pill on one centred line above the foods — the user asked for Today's
+  slots to be centred. `SIDE_BY_SIDE` (Plan Meal) puts the name and pill in a fixed 136dp left
+  column with the foods stacked as bordered blocks down the right; a slot is then only as tall as
+  its taller column, which is what got dinner above the fold on a screen that also carries the day
+  picker. Do not "unify" these into one layout — the two screens have different vertical budgets.
+- The side-by-side row needs `Modifier.height(IntrinsicSize.Min)` for the `VerticalDivider`
+  between the two columns to have a height to fill. Remove it and the row goes back to
+  wrap-content, and the divider silently collapses to nothing rather than erroring.
 - **The slots are full-bleed rectangles with no gap, closed by a divider — not `Card`s.** A Card's
   insets, corners and inter-card gaps cost roughly a fifth of the list height, which is what was
   pushing dinner off the screen. The list container carries the same `surfaceVariant` background as
@@ -232,10 +245,22 @@ Conventions set in milestone 1 — keep following them:
 - `MealSlotCard(canRemove = ...)` must be false whenever the rows shown did not come from the
   table the caller's remove writes to. Plan Meal passes `true` (always plan rows); Today passes
   `editMode && dayLogged`.
-- **The kid-friendly look comes from shape and type, not colour.** Material You dynamic colour is
-  deliberately kept, so the palette follows the wallpaper; `ReevzShapes` (rounder than Material's
-  defaults) and the enlarged `Typography` are what carry the friendly feel, and they reach every
-  screen through `ReevzMealzTheme`. A genuinely rounded font would need a file in `res/font`.
+- **The look is a retro arcade HUD: fixed pink / yellow / blue, square corners, monospace.** All
+  three levers live in `ui/theme/` and reach every screen through `ReevzMealzTheme` — palette in
+  `Color.kt`, 0dp corners in `ReevzShapes`, `FontFamily.Monospace` in `Typography`.
+- **Material You dynamic colour is off, and the `dynamicColor` flag is gone.** It used to be on.
+  A wallpaper-derived scheme and a named three-colour palette cannot both be in charge, and the
+  palette is now the point, so it wins. Do not reintroduce the flag.
+- Pink is `primary` (slot names, buttons, a healthy sin bar), blue is `secondary`, yellow is
+  `tertiary`. Use the roles, not the raw `Retro*` values, so light and dark both stay correct.
+- **Palette contrast is checked, not eyeballed.** Every text-on-background pair in both schemes
+  clears WCAG AA (the weakest is 4.26:1 on 20sp bold, which is a large-text pass), and `outline`
+  clears 3:1 against the slot panel because it draws the 2dp chip borders. If you change a colour,
+  re-check the pair rather than trusting it to look fine in dark mode.
+- Type is monospace at *smaller* sizes than the old system-font scale, because monospace glyphs are
+  wider. That is what keeps "BOUGHT ITEMS" fitting beside the sin bar in the header.
+- A true pixel font (Press Start 2P and the like) would need a `.ttf` in `res/font`; monospace is
+  the no-asset stand-in and carries the feel at every size without risking an unreadable label.
 - `ThemeMode` is resolved by `ThemeMode.isDark()`; `MainActivity` reads it from
   `PreferencesViewModel` so Settings changes apply immediately. Both share one instance via the
   activity's ViewModel store.
@@ -270,10 +295,16 @@ Conventions set in milestone 1 — keep following them:
 - `SinStatus.remaining` is clamped at zero; `failed` is `allowance - used <= 0`, so overshooting
   the allowance still reads as simply failed rather than negative.
 - Material 3 has no success colour role, so the green for "Good Job!" is the one hand-picked pair
-  in `ui/theme/Color.kt` (`goodColor()`), chosen by `isSystemInDarkTheme()`. Red is
-  `colorScheme.error`.
+  in `ui/theme/Color.kt` (`goodColor()`). It picks by the **scheme's own background luminance**,
+  not `isSystemInDarkTheme()` — the latter followed the OS and so went wrong whenever Settings
+  forced Light or Dark against it. Red is `colorScheme.error`.
+- **Sins are a health bar in the header** (`ui/sin/SinHealthBar.kt`): a bordered strip of 10 cells
+  that empties as the month is spent — pink, then yellow under half, then red under a fifth, and
+  GAME OVER at zero. The cell count is fixed at 10, not one per sin: the allowance is configurable,
+  so a cell-per-sin bar would change width whenever it changed and be unreadably fine at 40. Any
+  part-used cell still counts as lit, so an empty bar means exactly zero.
 - **`SinViewModel` is shared, not per-screen.** `viewModel()` resolves to the activity's store, so
-  the shell badge, Today and Settings all read one instance and cannot disagree.
+  the header health bar, Today and Settings all read one instance and cannot disagree.
 - **Money Spent has two streams**: `bought_items` totals, and outside-food cost derived with the
   same plan-versus-actual rule Today uses (a day's own eaten record if it has one, else its
   plan). That rule is duplicated once, in `SpendDao.observeOutsideFoodTotal`, because it has to
@@ -308,6 +339,15 @@ Conventions set in milestone 1 — keep following them:
   table once. It is idempotent, so every edit action can safely call it first.
 - **A homecooked food has `pricePaise = null`**, not zero, and `place = null`. `FoodsViewModel.save`
   nulls both out on save so a price or shop typed before flipping the toggle cannot leak through.
+- **Food name and place are capitalised in two places, on purpose.** The keyboard gets
+  `KeyboardCapitalization.Words` so it happens as you type, and `FoodsViewModel.save` runs
+  `capitalizeWords` again on the way to the database. The keyboard setting is only a *hint* to
+  the IME — pasted text, swipe input and `adb shell input text` all slip through it — so the
+  save-time pass is what actually guarantees the stored value.
+- `util/TextCase.kt` only uppercases the **first letter** of each word and leaves the rest as
+  typed, so "KFC" and "McDonald's" survive; real title-casing would flatten them. Leading
+  punctuation does not consume the word start ("(tea break)" -> "(Tea Break)", which matters
+  because shops get written in brackets), but a leading digit does ("2nd" stays "2nd").
 - **`Food.place` is free text and optional even for outside food**, stored as null when blank so
   "no place recorded" has one representation. It is deliberately not a table of shops to pick from:
   it is a memory jog, and nothing reconciles across foods. It is shown only in the Foods list —
@@ -330,6 +370,19 @@ Conventions set in milestone 1 — keep following them:
 - `BoughtItem` is deliberately **not** linked to `Food`. A purchase is an event; a Food is a
   reusable planning block. Requiring every purchase to exist as a Food first would add friction
   for no gain. Revisit only if the two genuinely need to reconcile.
+- **The launcher icon is generated, not hand-drawn: `tools/make_icon.py`.** The art is a 16x16
+  ASCII grid at the top of that script — a pixel chicken in the app's own pink/yellow/indigo.
+  One run rewrites both adaptive-icon vector layers, the monochrome layer and all ten legacy
+  PNGs, so edit the grid and re-run rather than touching any generated file.
+- The adaptive foreground is sized to the 72dp safe **circle**, not the safe square. A circular
+  mask inscribes a circle in that square, so art sized to the square loses whatever sits at top
+  and bottom centre — here, the comb and the feet. `safe_scale()` fits the art's furthest
+  corner to the radius, which is why the bird looks smaller than the safe square would allow.
+- The `<monochrome>` layer is its own drawable, not the foreground reused. Themed icons are
+  tinted one flat colour, so reusing the foreground would flatten the bird into a blob; the
+  monochrome layer leaves the eyes as holes instead.
+- Legacy mipmaps are **PNG, and the template `.webp` files were deleted**. Two files with the
+  same resource name in one folder is a build error, so they cannot coexist.
 - No icon-pack dependency. `material-icons-core` is frozen at 1.7.8 while Compose is on 1.10.4
   and the artifact is deprecated, so navigation icons are hand-authored vector drawables in
   `res/drawable/ic_*.xml`. Do not put `android:tint="?attr/colorControlNormal"` in them — that is
@@ -340,6 +393,16 @@ Conventions set in milestone 1 — keep following them:
 - **No navigation library.** Section switching is `rememberSaveable` state plus a `when`, with a
   `BackHandler` returning to Today. Add `androidx.navigation.compose` when sections actually gain
   sub-screens, not before.
+- **The bottom bar carries four tabs, not six.** Six left about 68dp each on a phone, which was
+  cramped; four get about 103dp. `AppSection.inBottomBar` is the split, and `AppSection.tabs` /
+  `pauseMenuSections` are the two lists — adding a section means deciding which side it belongs on.
+- **Money Spent and Settings live in the pause menu** (`ui/PauseMenu.kt`), opened by the ☰ in the
+  header. They are still ordinary full sections; only the way in changed. A pause menu rather than
+  an overflow dropdown because the app is themed as a game and the top-right corner already
+  belongs to the sin bar — which is also why the ☰ is *leading*, not trailing.
+- `paused` is separate state from `section`, so pausing does not lose where you were. Back closes
+  the menu first and only then falls back to returning to Today; while paused no tab reads as
+  selected, and the header title says PAUSED rather than naming a screen that is not on show.
 
 ## Toolchain notes (non-obvious — read before touching Gradle)
 

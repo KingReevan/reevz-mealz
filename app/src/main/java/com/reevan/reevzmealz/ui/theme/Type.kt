@@ -7,75 +7,81 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * Larger and airier than the Material defaults: bigger body text, generous line heights, and
- * labels with a little more weight so headings read clearly at a glance.
+ * Monospace throughout, with wide letter spacing on headings — the typographic half of the arcade
+ * look, where the palette is the other half.
  *
- * Still the system font family. Genuinely rounded letterforms would need a font file bundled in
- * `res/font` — worth doing if a friendlier face is wanted, but it is an asset decision, not a
- * styling one.
+ * [FontFamily.Monospace] is the system's own fixed-width face, so this costs no asset and no
+ * dependency. A true pixel face (Press Start 2P and friends) would need a `.ttf` dropped into
+ * `res/font` and referenced here; that is an asset decision, and monospace already carries the
+ * feel at every size without risking an unreadable 12sp label.
+ *
+ * Sizes run slightly smaller than the previous system-font scale because monospace glyphs are
+ * wider — same visual weight, but "Bought Items" still fits beside the sin bar in the header.
  */
+private val Mono = FontFamily.Monospace
+
 val Typography = Typography(
     headlineMedium = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Mono,
         fontWeight = FontWeight.Bold,
-        fontSize = 30.sp,
-        lineHeight = 38.sp,
-        letterSpacing = 0.sp,
+        fontSize = 26.sp,
+        lineHeight = 34.sp,
+        letterSpacing = 1.sp,
     ),
     titleLarge = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Mono,
         fontWeight = FontWeight.Bold,
-        fontSize = 23.sp,
-        lineHeight = 30.sp,
-        letterSpacing = 0.sp,
+        fontSize = 20.sp,
+        lineHeight = 28.sp,
+        letterSpacing = 1.sp,
     ),
     titleMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 18.sp,
-        lineHeight = 26.sp,
-        letterSpacing = 0.1.sp,
+        fontFamily = Mono,
+        fontWeight = FontWeight.Bold,
+        fontSize = 17.sp,
+        lineHeight = 24.sp,
+        letterSpacing = 0.8.sp,
     ),
     bodyLarge = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Mono,
         fontWeight = FontWeight.Normal,
-        fontSize = 17.sp,
-        lineHeight = 26.sp,
-        letterSpacing = 0.4.sp,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        letterSpacing = 0.2.sp,
     ),
     bodyMedium = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Mono,
         fontWeight = FontWeight.Normal,
-        fontSize = 15.sp,
-        lineHeight = 22.sp,
-        letterSpacing = 0.25.sp,
+        fontSize = 14.sp,
+        lineHeight = 21.sp,
+        letterSpacing = 0.2.sp,
     ),
     bodySmall = TextStyle(
-        fontFamily = FontFamily.Default,
+        fontFamily = Mono,
         fontWeight = FontWeight.Normal,
-        fontSize = 13.sp,
-        lineHeight = 19.sp,
-        letterSpacing = 0.3.sp,
+        fontSize = 12.sp,
+        lineHeight = 18.sp,
+        letterSpacing = 0.2.sp,
     ),
     labelLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 15.sp,
+        fontFamily = Mono,
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
         lineHeight = 20.sp,
-        letterSpacing = 0.3.sp,
+        letterSpacing = 0.8.sp,
     ),
     labelMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 13.sp,
+        fontFamily = Mono,
+        fontWeight = FontWeight.Bold,
+        fontSize = 12.sp,
         lineHeight = 18.sp,
-        letterSpacing = 0.4.sp,
+        letterSpacing = 0.6.sp,
     ),
     labelSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
+        fontFamily = Mono,
+        fontWeight = FontWeight.Bold,
+        fontSize = 11.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.4.sp,
+        letterSpacing = 0.6.sp,
     ),
 )

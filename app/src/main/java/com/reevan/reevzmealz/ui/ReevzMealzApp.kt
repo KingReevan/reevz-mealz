@@ -6,11 +6,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -21,8 +20,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.reevan.reevzmealz.R
+import com.reevan.reevzmealz.ui.sin.SinHealthBar
 import com.reevan.reevzmealz.ui.sin.SinViewModel
 import com.reevan.reevzmealz.ui.bought.BoughtItemsScreen
 import com.reevan.reevzmealz.ui.foods.FoodsScreen
@@ -30,37 +31,6 @@ import com.reevan.reevzmealz.ui.money.MoneySpentScreen
 import com.reevan.reevzmealz.ui.plan.PlanMealScreen
 import com.reevan.reevzmealz.ui.settings.SettingsScreen
 import com.reevan.reevzmealz.ui.today.TodayScreen
-
-/**
- * Sins remaining, in the top-right of every section.
- *
- * A compact pill rather than plain text so it stays legible beside longer section titles like
- * "Bought Items", and turns into an error-coloured chip once the month is spent.
- */
-@Composable
-private fun SinBadge(sinsLeft: Int) {
-    val failed = sinsLeft == 0
-    Surface(
-        color = if (failed) {
-            MaterialTheme.colorScheme.errorContainer
-        } else {
-            MaterialTheme.colorScheme.secondaryContainer
-        },
-        shape = MaterialTheme.shapes.small,
-        modifier = Modifier.padding(end = 12.dp),
-    ) {
-        Text(
-            text = sinsLeft.toString() + " sins",
-            style = MaterialTheme.typography.labelMedium,
-            color = if (failed) {
-                MaterialTheme.colorScheme.onErrorContainer
-            } else {
-                MaterialTheme.colorScheme.onSecondaryContainer
-            },
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-        )
-    }
-}
 
 /**
  * App shell: a single Scaffold owning the top bar and the bottom navigation bar, with the
@@ -74,30 +44,62 @@ private fun SinBadge(sinsLeft: Int) {
 @Composable
 fun ReevzMealzApp() {
     var section by rememberSaveable { mutableStateOf(AppSection.TODAY) }
+    var paused by rememberSaveable { mutableStateOf(false) }
 
     // Shared with Today and Settings: viewModel() resolves to the activity's store.
     val sinViewModel: SinViewModel = viewModel(factory = SinViewModel.Factory)
-    val sinsLeft by sinViewModel.remaining.collectAsState()
+    val sinState by sinViewModel.uiState.collectAsState()
 
-    // Back from any other section returns to Today rather than leaving the app.
-    BackHandler(enabled = section != AppSection.TODAY) {
-        section = AppSection.TODAY
+    // Back closes the pause menu first, then falls back to returning to Today rather than
+    // leaving the app. Without the first step, opening pause and pressing back would jump the
+    // user out of whichever section they had paused from.
+    BackHandler(enabled = paused || section != AppSection.TODAY) {
+        if (paused) paused = false else section = AppSection.TODAY
     }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text(section.title) },
-                actions = { SinBadge(sinsLeft = sinsLeft) },
+                // Uppercased for the arcade feel; the monospace face does the rest. While paused
+                // the header names the menu, not the section underneath it, which would otherwise
+                // read as the title of a screen that is not on show.
+                title = {
+                    Text(
+                        text = if (paused) "PAUSED" else section.title.uppercase(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                // Leading, not trailing: the top-right is the sin bar's, and the two would fight
+                // for the same corner.
+                navigationIcon = {
+                    IconButton(onClick = { paused = !paused }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_menu),
+                            contentDescription = if (paused) "Close menu" else "Menu",
+                        )
+                    }
+                },
+                actions = {
+                    SinHealthBar(
+                        remaining = sinState.status.remaining,
+                        allowance = sinState.status.allowance,
+                    )
+                },
             )
         },
         bottomBar = {
             NavigationBar {
-                AppSection.entries.forEach { entry ->
+                AppSection.tabs.forEach { entry ->
                     NavigationBarItem(
-                        selected = section == entry,
-                        onClick = { section = entry },
+                        // Nothing is selected while paused, and while sitting in a section the
+                        // bar no longer carries — neither is one of these four.
+                        selected = !paused && section == entry,
+                        onClick = {
+                            paused = false
+                            section = entry
+                        },
                         icon = {
                             Icon(
                                 painter = painterResource(entry.icon),
@@ -116,15 +118,25 @@ fun ReevzMealzApp() {
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            when (section) {
-                AppSection.TODAY -> TodayScreen(
-                    onGoToPlan = { section = AppSection.PLAN_MEAL },
+            if (paused) {
+                PauseMenu(
+                    onOpenSection = { opened ->
+                        section = opened
+                        paused = false
+                    },
+                    onResume = { paused = false },
                 )
-                AppSection.PLAN_MEAL -> PlanMealScreen()
-                AppSection.BOUGHT_ITEMS -> BoughtItemsScreen()
-                AppSection.FOODS -> FoodsScreen()
-                AppSection.MONEY_SPENT -> MoneySpentScreen()
-                AppSection.SETTINGS -> SettingsScreen()
+            } else {
+                when (section) {
+                    AppSection.TODAY -> TodayScreen(
+                        onGoToPlan = { section = AppSection.PLAN_MEAL },
+                    )
+                    AppSection.PLAN_MEAL -> PlanMealScreen()
+                    AppSection.BOUGHT_ITEMS -> BoughtItemsScreen()
+                    AppSection.FOODS -> FoodsScreen()
+                    AppSection.MONEY_SPENT -> MoneySpentScreen()
+                    AppSection.SETTINGS -> SettingsScreen()
+                }
             }
         }
     }

@@ -28,6 +28,7 @@ import com.reevan.reevzmealz.ui.common.FoodPickerSheet
 import com.reevan.reevzmealz.ui.common.AddFoodAction
 import com.reevan.reevzmealz.ui.common.ClearSlotAction
 import com.reevan.reevzmealz.ui.common.MealSlotCard
+import com.reevan.reevzmealz.ui.common.SlotLayout
 import com.reevan.reevzmealz.util.formatDayHeading
 import com.reevan.reevzmealz.util.formatPaise
 
@@ -92,6 +93,9 @@ fun PlanMealScreen(
                     // Plan Meal always shows plan rows, so removal is always safe here.
                     canRemove = true,
                     onRemoveFood = viewModel::removeSlotFood,
+                    // The day picker owns roughly a third of this screen, so the slots use the
+                    // shorter side-by-side layout to keep dinner nearer the fold.
+                    layout = SlotLayout.SIDE_BY_SIDE,
                     emptyText = "No food",
                     actions = {
                         AddFoodAction { viewModel.openPicker(slot.type) }

@@ -10,6 +10,7 @@ import com.reevan.reevzmealz.data.Food
 import com.reevan.reevzmealz.data.FoodDao
 import com.reevan.reevzmealz.data.MealDatabase
 import com.reevan.reevzmealz.data.MealPlace
+import com.reevan.reevzmealz.util.capitalizeWords
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -37,14 +38,22 @@ class FoodsViewModel(private val dao: FoodDao) : ViewModel() {
      * A homecooked food is stored with no price and no place, whatever was typed before the
      * toggle flipped. A blank place is stored as null rather than an empty string, so "no place
      * recorded" has exactly one representation.
+     *
+     * Name and place are capitalised here as well as by the keyboard, because the keyboard's
+     * capitalisation is only a hint to the IME: pasted text, swipe input and a keyboard that
+     * ignores the hint would all otherwise slip through in lower case.
      */
     fun save(id: Long?, name: String, source: MealPlace, pricePaise: Int?, place: String?) {
         val food = Food(
             id = id ?: 0L,
-            name = name.trim(),
+            name = capitalizeWords(name.trim()),
             source = source,
             pricePaise = if (source == MealPlace.HOME) null else pricePaise,
-            place = if (source == MealPlace.HOME) null else place?.trim()?.ifBlank { null },
+            place = if (source == MealPlace.HOME) {
+                null
+            } else {
+                place?.trim()?.ifBlank { null }?.let(::capitalizeWords)
+            },
         )
         viewModelScope.launch {
             if (id == null) dao.insert(food) else dao.update(food)
