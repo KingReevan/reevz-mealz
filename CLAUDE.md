@@ -137,9 +137,9 @@ month's total, then one card per purchase, newest first. Full CRUD.
 ‹ › navigation), split into Bought Items and Outside food. Defaults to the current month.
 Browsing stops at the 12-month retention window, and the current period counts only up to today.
 
-**Settings** is the single home for configuration, in sections: **Theme** (System/Light/Dark),
-**Notifications** (nightly reminder on/off and time), **Sins** (monthly allowance), **Storage**
-(the retention purge). New settings belong here as another section.
+**Settings** is the single home for configuration, as bordered panels: **Theme**
+(System/Light/Dark), **Notifications** (nightly reminder on/off and time), **Sins** (monthly
+allowance), **Storage** (the retention purge). New settings belong here as another panel.
 
 **Notifications**: one nightly reminder, default 19:00 device-local, which fires only when
 tomorrow has *nothing* planned at all.
@@ -303,6 +303,15 @@ Conventions set in milestone 1 — keep following them:
   GAME OVER at zero. The cell count is fixed at 10, not one per sin: the allowance is configurable,
   so a cell-per-sin bar would change width whenever it changed and be unreadably fine at 40. Any
   part-used cell still counts as lit, so an empty bar means exactly zero.
+- **Each Settings group is a bordered `SettingsSection` panel, not flat text under a divider.**
+  Monospace wraps every explanation onto two or three lines, and those lines then carry as much
+  visual weight as the controls, so the screen read as one wall. Add a new setting as another
+  panel, and keep its hint to one line where the control can speak for itself.
+- **Buttons whose label can wrap use `heightIn(min = 48.dp)`, never `height(48.dp)`.** A fixed
+  height clipped the second line of "Delete records older than 12 months" clean off on a real
+  phone. The label is now short enough to fit on one line either way.
+- The Theme hint no longer claims colours come from the wallpaper. It said so while Material You
+  was on; that stopped being true with the retro palette, and the text outlived the behaviour.
 - **`SinViewModel` is shared, not per-screen.** `viewModel()` resolves to the activity's store, so
   the header health bar, Today and Settings all read one instance and cannot disagree.
 - **Money Spent has two streams**: `bought_items` totals, and outside-food cost derived with the

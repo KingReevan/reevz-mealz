@@ -6,12 +6,13 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -19,13 +20,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,7 +54,12 @@ import com.reevan.reevzmealz.util.formatShortDate
 
 /**
  * Everything configurable lives here: Theme, Notifications, Sins and Storage. New settings should
- * be added as another section rather than scattered into their own screens.
+ * be added as another [SettingsSection] rather than scattered into their own screens.
+ *
+ * Each section is a bordered panel. Flat text separated by dividers read as one unbroken wall,
+ * because the monospace face wraps every explanation onto two or three lines and those lines then
+ * carry as much visual weight as the controls they describe. The panels give the eye somewhere to
+ * stop, and the explanations are kept to one line each wherever the setting can carry itself.
  */
 @Composable
 fun SettingsScreen(
@@ -86,118 +92,109 @@ fun SettingsScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        SectionHeading("Theme")
-        SingleChoiceSegmentedButtonRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-        ) {
-            ThemeMode.entries.forEachIndexed { index, mode ->
-                SegmentedButton(
-                    selected = appSettings.themeMode == mode,
-                    onClick = { preferences.setThemeMode(mode) },
-                    shape = SegmentedButtonDefaults.itemShape(
-                        index = index,
-                        count = ThemeMode.entries.size,
-                    ),
-                    label = { Text(mode.label) },
-                )
-            }
-        }
-        Hint("System follows your phone's setting. Colours come from your wallpaper either way.")
-
-        SectionDivider()
-
-        SectionHeading("Notifications")
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 56.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Nightly plan reminder", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = "Only if tomorrow has nothing planned",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = appSettings.remindersEnabled,
-                onCheckedChange = { wantOn ->
-                    if (wantOn && !notificationsPermitted) {
-                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        preferences.setRemindersEnabled(wantOn)
-                    }
-                },
-            )
-        }
-
-        // Without this the switch could read "on" while Android silently drops every reminder.
-        if (appSettings.remindersEnabled && !notificationsPermitted) {
-            Text(
-                text = "Reminders are on, but Android is not allowing notifications for this " +
-                    "app, so nothing will appear.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-            OutlinedButton(
-                onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+        SettingsSection("Theme") {
+            SingleChoiceSegmentedButtonRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .heightIn(min = 48.dp),
             ) {
-                Text("Allow notifications")
+                ThemeMode.entries.forEachIndexed { index, mode ->
+                    SegmentedButton(
+                        selected = appSettings.themeMode == mode,
+                        onClick = { preferences.setThemeMode(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = ThemeMode.entries.size,
+                        ),
+                        label = { Text(mode.label) },
+                    )
+                }
             }
+            Hint("System follows your phone's setting.")
         }
-        ReminderTimeEditor(
-            hour = appSettings.reminderHour,
-            minute = appSettings.reminderMinute,
-            enabled = appSettings.remindersEnabled,
-            onSave = preferences::setReminderTime,
-        )
 
-        SectionDivider()
+        SettingsSection("Notifications") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Nightly reminder", style = MaterialTheme.typography.bodyLarge)
+                    Hint("Only when tomorrow is empty")
+                }
+                Switch(
+                    checked = appSettings.remindersEnabled,
+                    onCheckedChange = { wantOn ->
+                        if (wantOn && !notificationsPermitted) {
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            preferences.setRemindersEnabled(wantOn)
+                        }
+                    },
+                )
+            }
 
-        SectionHeading("Sins")
-        Hint(
-            "One sin for each meal that does not go to plan. You get this many per month, and " +
-                "whatever is left is discarded when the month turns over.",
-        )
-        AllowanceEditor(
-            allowance = sinState.status.allowance,
-            editable = sinState.allowanceEditable,
-            daysUntilEditable = sinState.daysUntilEditable,
-            onSave = sinViewModel::setAllowance,
-        )
-        Text(
-            text = sinState.status.remaining.toString() + " of " +
-                sinState.status.allowance + " left this month",
-            style = MaterialTheme.typography.bodyMedium,
-        )
+            // Without this the switch could read "on" while Android silently drops every reminder.
+            if (appSettings.remindersEnabled && !notificationsPermitted) {
+                Text(
+                    text = "Android is blocking notifications, so none will appear.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                OutlinedButton(
+                    onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
+                ) {
+                    Text("Allow notifications")
+                }
+            }
 
-        SectionDivider()
-
-        SectionHeading("Storage")
-        Hint(
-            "Money Spent shows the last $RETAINED_MONTHS months. Older purchases, plans and " +
-                "eaten records can be deleted to keep the app small.",
-        )
-        Hint("Anything before " + formatShortDate(viewModel.cutoff) + " counts as older.")
-        OutlinedButton(
-            onClick = viewModel::requestPurge,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-        ) {
-            Text("Delete records older than $RETAINED_MONTHS months")
+            ReminderTimeEditor(
+                hour = appSettings.reminderHour,
+                minute = appSettings.reminderMinute,
+                enabled = appSettings.remindersEnabled,
+                onSave = preferences::setReminderTime,
+            )
         }
-        Hint("Your Foods list is never deleted.")
+
+        SettingsSection("Sins") {
+            Text(
+                text = sinState.status.remaining.toString() + " of " +
+                    sinState.status.allowance + " left this month",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Hint("One sin per meal that goes off plan. Unused sins are discarded each month.")
+            AllowanceEditor(
+                allowance = sinState.status.allowance,
+                editable = sinState.allowanceEditable,
+                daysUntilEditable = sinState.daysUntilEditable,
+                onSave = sinViewModel::setAllowance,
+            )
+        }
+
+        SettingsSection("Storage") {
+            Hint("Money Spent keeps the last $RETAINED_MONTHS months.")
+            Hint("Anything before " + formatShortDate(viewModel.cutoff) + " counts as old.")
+            OutlinedButton(
+                onClick = viewModel::requestPurge,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // heightIn, not height: the label wraps on a narrow screen and a fixed
+                    // height clipped the second line clean off.
+                    .heightIn(min = 48.dp),
+            ) {
+                Text("Delete old records")
+            }
+            Hint("Your Foods list is never touched.")
+        }
     }
 
     val pending = state.pendingPurge
@@ -222,13 +219,32 @@ fun SettingsScreen(
     }
 }
 
+/** One bordered panel of related settings, titled in the app's arcade style. */
 @Composable
-private fun SectionHeading(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-    )
+private fun SettingsSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.small,
+        border = BorderStroke(2.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = title.uppercase(),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            content()
+        }
+    }
 }
 
 @Composable
@@ -240,14 +256,14 @@ private fun Hint(text: String) {
     )
 }
 
+/**
+ * Reminder time as two small number fields, avoiding a full time-picker dependency.
+ *
+ * Set sits on its own line, right-aligned. Squeezed onto the same row as both fields it left each
+ * of them about a third of the width, which is what made this the tightest row on the screen.
+ */
 @Composable
-private fun SectionDivider() {
-    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-}
-
-/** Reminder time as two small number fields, avoiding a full time-picker dependency. */
-@Composable
-private fun ReminderTimeEditor(
+private fun ColumnScope.ReminderTimeEditor(
     hour: Int,
     minute: Int,
     enabled: Boolean,
@@ -262,6 +278,7 @@ private fun ReminderTimeEditor(
         parsedMinute != null && parsedMinute in 0..59
     val changed = parsedHour != hour || parsedMinute != minute
 
+    Text("Reminder time", style = MaterialTheme.typography.bodyLarge)
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -280,6 +297,7 @@ private fun ReminderTimeEditor(
             ),
             modifier = Modifier.weight(1f),
         )
+        Text(text = ":", style = MaterialTheme.typography.titleLarge)
         OutlinedTextField(
             value = minuteText,
             onValueChange = { minuteText = it },
@@ -293,17 +311,19 @@ private fun ReminderTimeEditor(
             ),
             modifier = Modifier.weight(1f),
         )
-        Button(
-            onClick = {
-                if (parsedHour != null && parsedMinute != null) onSave(parsedHour, parsedMinute)
-            },
-            enabled = enabled && valid && changed,
-            modifier = Modifier.height(48.dp),
-        ) {
-            Text("Set")
-        }
     }
-    Hint("24-hour, your phone's local time. Default is 19:00.")
+    Hint("24-hour, your phone's local time.")
+    Button(
+        onClick = {
+            if (parsedHour != null && parsedMinute != null) onSave(parsedHour, parsedMinute)
+        },
+        enabled = enabled && valid && changed,
+        modifier = Modifier
+            .align(Alignment.End)
+            .heightIn(min = 48.dp),
+    ) {
+        Text("Set time")
+    }
 }
 
 /**
@@ -311,7 +331,7 @@ private fun ReminderTimeEditor(
  * starts to pinch — which is the whole point of the number.
  */
 @Composable
-private fun AllowanceEditor(
+private fun ColumnScope.AllowanceEditor(
     allowance: Int,
     editable: Boolean,
     daysUntilEditable: Int,
@@ -322,38 +342,24 @@ private fun AllowanceEditor(
     val valid = parsed != null && parsed >= 0
     val changed = parsed != allowance
 
-    Row(
+    OutlinedTextField(
+        value = text,
+        onValueChange = { text = it },
+        label = { Text("Sins per month") },
+        singleLine = true,
+        enabled = editable,
+        isError = !valid,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Number,
+            imeAction = ImeAction.Done,
+        ),
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            label = { Text("Sins per month") },
-            singleLine = true,
-            enabled = editable,
-            isError = !valid,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number,
-                imeAction = ImeAction.Done,
-            ),
-            modifier = Modifier.weight(1f),
-        )
-        Button(
-            onClick = { parsed?.let(onSave) },
-            enabled = editable && valid && changed,
-            modifier = Modifier.height(48.dp),
-        ) {
-            Text("Set")
-        }
-    }
-
+    )
     Text(
         text = if (editable) {
-            "Once set, this cannot be changed for $SIN_CONFIG_LOCK_DAYS days."
+            "Locked for $SIN_CONFIG_LOCK_DAYS days once set."
         } else {
-            "Locked. You can change this again in " + daysUntilEditable +
+            "Locked. Changeable in " + daysUntilEditable +
                 if (daysUntilEditable == 1) " day." else " days."
         },
         style = MaterialTheme.typography.bodySmall,
@@ -363,6 +369,15 @@ private fun AllowanceEditor(
             MaterialTheme.colorScheme.error
         },
     )
+    Button(
+        onClick = { parsed?.let(onSave) },
+        enabled = editable && valid && changed,
+        modifier = Modifier
+            .align(Alignment.End)
+            .heightIn(min = 48.dp),
+    ) {
+        Text("Set")
+    }
 }
 
 @Composable
