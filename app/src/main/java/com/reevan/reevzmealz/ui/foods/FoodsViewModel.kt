@@ -34,14 +34,17 @@ class FoodsViewModel(private val dao: FoodDao) : ViewModel() {
 
     /**
      * Creates the food when [id] is null, otherwise updates it in place.
-     * A homecooked food is stored with no price, whatever was typed before the toggle flipped.
+     * A homecooked food is stored with no price and no place, whatever was typed before the
+     * toggle flipped. A blank place is stored as null rather than an empty string, so "no place
+     * recorded" has exactly one representation.
      */
-    fun save(id: Long?, name: String, source: MealPlace, pricePaise: Int?) {
+    fun save(id: Long?, name: String, source: MealPlace, pricePaise: Int?, place: String?) {
         val food = Food(
             id = id ?: 0L,
             name = name.trim(),
             source = source,
             pricePaise = if (source == MealPlace.HOME) null else pricePaise,
+            place = if (source == MealPlace.HOME) null else place?.trim()?.ifBlank { null },
         )
         viewModelScope.launch {
             if (id == null) dao.insert(food) else dao.update(food)

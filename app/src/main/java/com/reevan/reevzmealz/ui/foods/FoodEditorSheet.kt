@@ -47,7 +47,7 @@ import com.reevan.reevzmealz.util.parseRupeesToPaise
 fun FoodEditorSheet(
     food: Food?,
     onDismiss: () -> Unit,
-    onSave: (id: Long?, name: String, source: MealPlace, pricePaise: Int?) -> Unit,
+    onSave: (id: Long?, name: String, source: MealPlace, pricePaise: Int?, place: String?) -> Unit,
     onDelete: (Food) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -60,6 +60,7 @@ fun FoodEditorSheet(
     var priceText by rememberSaveable(key) {
         mutableStateOf(food?.pricePaise?.let { paiseToEditableRupees(it) } ?: "")
     }
+    var placeText by rememberSaveable(key) { mutableStateOf(food?.place ?: "") }
 
     val parsedPrice = remember(priceText) { parseRupeesToPaise(priceText) }
     val priceInvalid = isOutside && parsedPrice == null
@@ -111,26 +112,38 @@ fun FoodEditorSheet(
                 )
             }
 
-            // Price is only meaningful for food bought outside.
+            // Price and place are only meaningful for food bought outside.
             AnimatedVisibility(visible = isOutside) {
-                OutlinedTextField(
-                    value = priceText,
-                    onValueChange = { priceText = it },
-                    label = { Text("Price") },
-                    prefix = { Text("₹") },
-                    singleLine = true,
-                    isError = priceInvalid,
-                    supportingText = if (priceInvalid) {
-                        { Text("Enter an amount like 120 or 120.50") }
-                    } else {
-                        null
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Decimal,
-                        imeAction = ImeAction.Done,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    OutlinedTextField(
+                        value = priceText,
+                        onValueChange = { priceText = it },
+                        label = { Text("Price") },
+                        prefix = { Text("₹") },
+                        singleLine = true,
+                        isError = priceInvalid,
+                        supportingText = if (priceInvalid) {
+                            { Text("Enter an amount like 120 or 120.50") }
+                        } else {
+                            null
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                            imeAction = ImeAction.Next,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    OutlinedTextField(
+                        value = placeText,
+                        onValueChange = { placeText = it },
+                        label = { Text("Place") },
+                        placeholder = { Text("Where you bought it") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
 
             Button(
@@ -140,6 +153,7 @@ fun FoodEditorSheet(
                         name,
                         if (isOutside) MealPlace.OUT else MealPlace.HOME,
                         if (isOutside) parsedPrice else null,
+                        if (isOutside) placeText else null,
                     )
                 },
                 enabled = canSave,

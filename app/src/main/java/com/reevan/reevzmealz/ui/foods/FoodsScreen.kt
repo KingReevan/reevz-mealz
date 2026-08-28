@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.reevan.reevzmealz.data.Food
@@ -79,8 +82,8 @@ fun FoodsScreen(
         FoodEditorSheet(
             food = (currentEditor as? Editor.Existing)?.food,
             onDismiss = { editor = null },
-            onSave = { id, name, source, pricePaise ->
-                viewModel.save(id, name, source, pricePaise)
+            onSave = { id, name, source, pricePaise, place ->
+                viewModel.save(id, name, source, pricePaise, place)
                 editor = null
             },
             onDelete = { food ->
@@ -155,6 +158,28 @@ private fun FoodRow(food: Food, onClick: () -> Unit) {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
+        }
+
+        // Where it was bought, on the right. Width-capped and ellipsised so a long shop name
+        // cannot squeeze the food's own name out of the row.
+        val place = food.place
+        if (!place.isNullOrBlank()) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier
+                    .padding(start = 12.dp)
+                    .widthIn(max = 140.dp),
+            ) {
+                Text(
+                    text = place,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                )
+            }
         }
     }
 }

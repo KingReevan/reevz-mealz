@@ -122,8 +122,9 @@ foods from the Foods section. Several foods per slot. Full CRUD over assignments
 The app shell has six top-level sections in a bottom navigation bar: **Today, Plan Meal, Bought
 Items, Foods, Money Spent, Settings**. All six are built.
 
-**Foods** holds atomic food items — name, a Homecooked/Outside toggle, and a price that only
-applies when Outside. They are the building blocks meal planning will draw on. Full CRUD.
+**Foods** holds atomic food items — name, a Homecooked/Outside toggle, and a price plus a **place**
+(where it was bought) that only apply when Outside. The place shows as a chip on the right of each
+row. They are the building blocks meal planning will draw on. Full CRUD.
 
 **Bought Items** records grocery/ingredient purchases — name, price, date — as a month-wise
 history in the style of a payments app's transaction list: a sticky month heading carrying that
@@ -157,7 +158,7 @@ app/src/main/java/com/reevan/reevzmealz/
 │   ├── PlannedMealDao.kt        observeDay(Flow), observePlannedDays, insert, delete, clearSlot
 │   ├── EatenMeal.kt             @Entity actuals + EatenDay marker entity
 │   ├── EatenMealDao.kt          observeDay, observeIsLogged, startLoggingDay, resetDayToPlan
-│   ├── Food.kt                  @Entity, atomic food item, nullable pricePaise
+│   ├── Food.kt                  @Entity, atomic food item, nullable pricePaise + place
 │   ├── FoodDao.kt               observeAll(Flow), insert, update, delete
 │   ├── BoughtItem.kt            @Entity, a purchase: name, pricePaise, boughtAt
 │   ├── BoughtItemDao.kt         observeAll(Flow), insert, update, delete
@@ -167,7 +168,7 @@ app/src/main/java/com/reevan/reevzmealz/
 │   ├── SinDao.kt                sin counts, endDay transaction, allowance settings
 │   ├── SpendDao.kt              read-only period totals for Money Spent
 │   ├── MaintenanceDao.kt        12-month retention purge (the only bulk delete)
-│   └── MealDatabase.kt          @Database v5, singleton, exportSchema, autoMigrations
+│   └── MealDatabase.kt          @Database v8, singleton, exportSchema, autoMigrations
 ├── notify/
 │   ├── PlanReminderScheduler.kt  AlarmManager arming + pure nextTriggerAt
 │   ├── PlanReminderReceiver.kt   checks tomorrow, notifies, re-arms
@@ -305,8 +306,12 @@ Conventions set in milestone 1 — keep following them:
   do not re-derive it in a screen.
 - Switching Edit Mode on calls `startLoggingDay`, which copies that day's plan into the eaten
   table once. It is idempotent, so every edit action can safely call it first.
-- **A homecooked food has `pricePaise = null`**, not zero. `FoodsViewModel.save` nulls it out on
-  save so a price typed before flipping the toggle cannot leak through.
+- **A homecooked food has `pricePaise = null`**, not zero, and `place = null`. `FoodsViewModel.save`
+  nulls both out on save so a price or shop typed before flipping the toggle cannot leak through.
+- **`Food.place` is free text and optional even for outside food**, stored as null when blank so
+  "no place recorded" has one representation. It is deliberately not a table of shops to pick from:
+  it is a memory jog, and nothing reconciles across foods. It is shown only in the Foods list —
+  meal slots, the food picker and Money Spent do not carry it.
 - Destructive actions confirm first: deleting a food goes through an `AlertDialog`.
 - **`java.util.Calendar`, not `java.time`.** `java.time` needs API 26 and `minSdk` is 24, so using
   it would require core library desugaring or raising `minSdk`. Change that deliberately, not

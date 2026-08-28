@@ -10,7 +10,8 @@ import androidx.room.PrimaryKey
  * the same distinction a meal carries — a food bought outside becomes a meal eaten out. The
  * Foods UI labels it "Homecooked" / "Outside".
  *
- * [pricePaise] is null for homecooked food: a price is only meaningful when the item is bought.
+ * [pricePaise] and [place] are null for homecooked food: neither a price nor a shop is meaningful
+ * for something cooked at home.
  */
 @Entity(tableName = "foods")
 data class Food(
@@ -19,4 +20,12 @@ data class Food(
     val source: MealPlace,
     /** Price in paise, or null when [source] is [MealPlace.HOME]. */
     val pricePaise: Int? = null,
+    /**
+     * Where the food was bought, or null when [source] is [MealPlace.HOME].
+     *
+     * Free text rather than a table of shops: it is a note to jog the memory, not something that
+     * needs to reconcile across foods. Optional even for outside food, so a forgotten shop name
+     * cannot block saving.
+     */
+    val place: String? = null,
 )

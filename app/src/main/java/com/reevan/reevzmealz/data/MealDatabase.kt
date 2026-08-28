@@ -15,9 +15,10 @@ import androidx.room.RoomDatabase
  * - v5: added `eaten_meals` and `eaten_days`
  * - v6: added `sin_events`, `ended_days` and `sin_settings`
  * - v7: added `app_settings`
+ * - v8: added `foods.place`
  *
- * Version bumps must add a migration here. Adding a table is purely additive, so Room generates
- * the migration from the exported schemas in `app/schemas/`. Never use
+ * Version bumps must add a migration here. Adding a table, or a nullable column, is purely
+ * additive, so Room generates the migration from the exported schemas in `app/schemas/`. Never use
  * fallbackToDestructiveMigration — logged meals and spending are not recoverable.
  */
 @Database(
@@ -33,7 +34,7 @@ import androidx.room.RoomDatabase
         SinSettings::class,
         AppSettings::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -42,6 +43,7 @@ import androidx.room.RoomDatabase
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
         AutoMigration(from = 6, to = 7),
+        AutoMigration(from = 7, to = 8),
     ],
 )
 abstract class MealDatabase : RoomDatabase() {
