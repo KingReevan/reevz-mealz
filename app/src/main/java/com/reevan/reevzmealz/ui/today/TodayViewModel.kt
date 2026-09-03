@@ -11,8 +11,10 @@ import com.reevan.reevzmealz.data.EatenMealDao
 import com.reevan.reevzmealz.data.Food
 import com.reevan.reevzmealz.data.FoodDao
 import com.reevan.reevzmealz.data.MealDatabase
+import com.reevan.reevzmealz.data.MealPlace
 import com.reevan.reevzmealz.data.MealType
 import com.reevan.reevzmealz.data.PlannedMealDao
+import com.reevan.reevzmealz.data.foodOf
 import com.reevan.reevzmealz.ui.common.PlanSlot
 import com.reevan.reevzmealz.ui.common.buildSlots
 import com.reevan.reevzmealz.ui.common.effectiveSlots
@@ -57,7 +59,7 @@ data class TodayUiState(
 class TodayViewModel(
     private val plannedMealDao: PlannedMealDao,
     private val eatenMealDao: EatenMealDao,
-    foodDao: FoodDao,
+    private val foodDao: FoodDao,
 ) : ViewModel() {
 
     /**
@@ -109,15 +111,6 @@ class TodayViewModel(
                 initialValue = emptyList(),
             )
 
-    val anyFoodsExist: StateFlow<Boolean> =
-        allFoods
-            .map { it.isNotEmpty() }
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-                initialValue = false,
-            )
-
     /**
      * Foods addable to the open slot: everything not already in it.
      *
@@ -167,6 +160,30 @@ class TodayViewModel(
         viewModelScope.launch { eatenMealDao.startLoggingDay(day) }
     }
 
+    /**
+     * Creates a food that did not exist yet and puts it straight into the slot.
+     *
+     * The picker can reach a restaurant or a dish that has no row yet, and the useful thing to do
+     * then is record it for good rather than send the user to the Foods section and back. Both
+     * writes share one coroutine so the row cannot be created without being added.
+     */
+    fun createAndAddFood(
+        type: MealType,
+        name: String,
+        source: MealPlace,
+        pricePaise: Int?,
+        place: String?,
+    ) {
+        val day = _dayStart.value
+        viewModelScope.launch {
+            val id = foodDao.insert(
+                foodOf(name = name, source = source, pricePaise = pricePaise, place = place),
+            )
+            eatenMealDao.startLoggingDay(day)
+            eatenMealDao.insert(EatenMeal(dayStart = day, type = type, foodId = id))
+        }
+    }
+
     fun addFood(type: MealType, food: Food) {
         val day = _dayStart.value
         viewModelScope.launch {
@@ -184,15 +201,6 @@ class TodayViewModel(
      */
     fun removeFood(entryId: Long) {
         viewModelScope.launch { eatenMealDao.deleteById(entryId) }
-    }
-
-    /** Records that nothing was eaten in this slot, which is not the same as never editing it. */
-    fun clearSlot(type: MealType) {
-        val day = _dayStart.value
-        viewModelScope.launch {
-            eatenMealDao.startLoggingDay(day)
-            eatenMealDao.clearSlot(day, type)
-        }
     }
 
     /** Throws away today's edits so the screen shows the plan again. */

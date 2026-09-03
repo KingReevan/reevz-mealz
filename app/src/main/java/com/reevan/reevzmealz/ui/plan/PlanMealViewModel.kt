@@ -9,9 +9,11 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.reevan.reevzmealz.data.Food
 import com.reevan.reevzmealz.data.FoodDao
 import com.reevan.reevzmealz.data.MealDatabase
+import com.reevan.reevzmealz.data.MealPlace
 import com.reevan.reevzmealz.data.MealType
 import com.reevan.reevzmealz.data.PlannedMeal
 import com.reevan.reevzmealz.data.PlannedMealDao
+import com.reevan.reevzmealz.data.foodOf
 import com.reevan.reevzmealz.ui.common.PlanSlot
 import com.reevan.reevzmealz.ui.common.buildSlots
 import com.reevan.reevzmealz.ui.common.totalCostPaise
@@ -38,7 +40,7 @@ data class PlanUiState(
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlanMealViewModel(
     private val plannedMealDao: PlannedMealDao,
-    foodDao: FoodDao,
+    private val foodDao: FoodDao,
 ) : ViewModel() {
 
     private val _today = MutableStateFlow(startOfDay(System.currentTimeMillis()))
@@ -50,6 +52,19 @@ class PlanMealViewModel(
     /** Which month or week the picker is showing; moves independently of the selected day. */
     private val _anchorDay = MutableStateFlow(_today.value)
     val anchorDay: StateFlow<Long> = _anchorDay.asStateFlow()
+
+    /**
+     * Whether the selected day's plan may still be changed.
+     *
+     * Drives the screen, but is not what protects the table — see [selectedDayIsOpen].
+     */
+    val lock: StateFlow<PlanLock> =
+        combine(_selectedDay, _today) { day, today -> planLock(day, today) }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+                initialValue = planLock(_selectedDay.value, _today.value),
+            )
 
     val uiState: StateFlow<PlanUiState> =
         _selectedDay
@@ -95,15 +110,6 @@ class PlanMealViewModel(
                 initialValue = emptyList(),
             )
 
-    val anyFoodsExist: StateFlow<Boolean> =
-        allFoods
-            .map { it.isNotEmpty() }
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-                initialValue = false,
-            )
-
     /** Which slot the food picker is open for, or null. */
     private val _pickerSlot = MutableStateFlow<MealType?>(null)
     val pickerSlot: StateFlow<MealType?> = _pickerSlot.asStateFlow()
@@ -132,7 +138,20 @@ class PlanMealViewModel(
             initialValue = emptyList(),
         )
 
+    /**
+     * Re-checks the lock against the clock, not against cached state.
+     *
+     * Every write goes through this rather than trusting the UI to have hidden its buttons. A
+     * screen left open across midnight would otherwise still believe tomorrow is tomorrow, and
+     * [refreshToday] here means that same check also drags the UI into the new day.
+     */
+    private fun selectedDayIsOpen(): Boolean {
+        refreshToday()
+        return planLock(_selectedDay.value, _today.value).isOpen
+    }
+
     fun openPicker(type: MealType) {
+        if (!selectedDayIsOpen()) return
         _pickerSlot.value = type
     }
 
@@ -145,6 +164,11 @@ class PlanMealViewModel(
         val today = startOfDay(System.currentTimeMillis())
         if (_today.value != today) {
             _today.value = today
+            // The day just became today, so it can no longer be planned. Drop a picker left open
+            // over midnight rather than leaving a sheet whose taps silently do nothing.
+            if (!planLock(_selectedDay.value, today).isOpen) {
+                _pickerSlot.value = null
+            }
         }
     }
 
@@ -157,6 +181,7 @@ class PlanMealViewModel(
     }
 
     fun assignFood(type: MealType, food: Food) {
+        if (!selectedDayIsOpen()) return
         val day = _selectedDay.value
         viewModelScope.launch {
             plannedMealDao.insert(
@@ -165,13 +190,32 @@ class PlanMealViewModel(
         }
     }
 
-    fun removeSlotFood(entryId: Long) {
-        viewModelScope.launch { plannedMealDao.deleteById(entryId) }
+    /**
+     * Creates a food that did not exist yet and assigns it to the slot.
+     *
+     * Behind [selectedDayIsOpen] like every other write here: a locked day must not gain plan
+     * rows, and it must not quietly create foods either.
+     */
+    fun createAndAssignFood(
+        type: MealType,
+        name: String,
+        source: MealPlace,
+        pricePaise: Int?,
+        place: String?,
+    ) {
+        if (!selectedDayIsOpen()) return
+        val day = _selectedDay.value
+        viewModelScope.launch {
+            val id = foodDao.insert(
+                foodOf(name = name, source = source, pricePaise = pricePaise, place = place),
+            )
+            plannedMealDao.insert(PlannedMeal(dayStart = day, type = type, foodId = id))
+        }
     }
 
-    fun clearSlot(type: MealType) {
-        val day = _selectedDay.value
-        viewModelScope.launch { plannedMealDao.clearSlot(day, type) }
+    fun removeSlotFood(entryId: Long) {
+        if (!selectedDayIsOpen()) return
+        viewModelScope.launch { plannedMealDao.deleteById(entryId) }
     }
 
     companion object {

@@ -2,11 +2,15 @@ package com.reevan.reevzmealz.ui.common
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -26,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reevan.reevzmealz.data.MealPlace
 import com.reevan.reevzmealz.data.SlotFood
+import com.reevan.reevzmealz.ui.theme.addBlockColors
 import com.reevan.reevzmealz.util.formatPaise
 
 /** How a slot arranges its name against its foods. */
@@ -69,7 +74,7 @@ fun MealSlotCard(
     layout: SlotLayout = SlotLayout.CENTRED,
     supportingLine: String? = null,
     emptyText: String = "Nothing yet",
-    actions: (@Composable () -> Unit)? = null,
+    actions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
@@ -108,7 +113,7 @@ private fun CentredSlot(
     onRemoveFood: (Long) -> Unit,
     supportingLine: String?,
     emptyText: String,
-    actions: (@Composable () -> Unit)?,
+    actions: (@Composable RowScope.() -> Unit)?,
 ) {
     Column(
         modifier = Modifier
@@ -151,7 +156,7 @@ private fun CentredSlot(
             )
         } else {
             slot.foods.forEach { food ->
-                SlotFoodRow(
+                SlotFoodBlock(
                     food = food,
                     canRemove = canRemove,
                     onRemove = { onRemoveFood(food.entryId) },
@@ -161,7 +166,8 @@ private fun CentredSlot(
 
         if (actions != null) {
             Row(
-                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 actions()
@@ -184,7 +190,7 @@ private fun SideBySideSlot(
     onRemoveFood: (Long) -> Unit,
     supportingLine: String?,
     emptyText: String,
-    actions: (@Composable () -> Unit)?,
+    actions: (@Composable RowScope.() -> Unit)?,
 ) {
     Row(
         modifier = Modifier
@@ -247,7 +253,8 @@ private fun SideBySideSlot(
 
             if (actions != null) {
                 Row(
-                    horizontalArrangement = Arrangement.Start,
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     actions()
@@ -297,81 +304,38 @@ private fun SlotCostPill(
     }
 }
 
-/** One food inside a centred slot: name, then a chip carrying its price or that it was homecooked. */
-@Composable
-private fun SlotFoodRow(food: SlotFood, canRemove: Boolean, onRemove: () -> Unit) {
-    val isOutside = food.source == MealPlace.OUT
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 36.dp)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = food.name,
-            style = MaterialTheme.typography.bodyLarge,
-            fontSize = 18.sp,
-            textAlign = TextAlign.Center,
-        )
-        Surface(
-            color = if (isOutside) {
-                MaterialTheme.colorScheme.errorContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
-            shape = MaterialTheme.shapes.extraSmall,
-            border = BorderStroke(
-                width = 2.dp,
-                color = if (isOutside) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.outline
-                },
-            ),
-            modifier = Modifier.padding(start = 10.dp),
-        ) {
-            Text(
-                text = if (isOutside) formatPaise((food.pricePaise ?: 0).toLong()) else "Home",
-                style = MaterialTheme.typography.labelMedium,
-                color = if (isOutside) {
-                    MaterialTheme.colorScheme.onErrorContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            )
-        }
-        if (canRemove) {
-            TextButton(
-                onClick = onRemove,
-                modifier = Modifier.padding(start = 2.dp),
-            ) {
-                Text(text = "✕", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
 /**
- * One food as a brick in the stack: a bordered block carrying the name, then its price.
+ * One food as a brick in the stack: name on the left, its price on the right.
  *
- * Bordered in error red when the food was bought outside, so the slot's cost is visible in the
- * stack itself rather than only in the pill.
+ * **Homecooked and outside food are different colours** — blue for home, red for bought outside —
+ * because where a meal came from is the thing worth seeing at a glance, and it is what decides
+ * whether the meal costs anything at all. The border matches, so the distinction survives in both
+ * light and dark.
+ *
+ * Left-aligned and only 40dp tall. Centring the name with a floating price chip beside it, as this
+ * used to do, wasted the width and made four slots of edit-mode rows scroll.
  */
 @Composable
 private fun SlotFoodBlock(food: SlotFood, canRemove: Boolean, onRemove: () -> Unit) {
     val isOutside = food.source == MealPlace.OUT
     Surface(
-        color = MaterialTheme.colorScheme.surface,
+        color = if (isOutside) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+        contentColor = if (isOutside) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        },
         shape = MaterialTheme.shapes.extraSmall,
         border = BorderStroke(
             width = 2.dp,
             color = if (isOutside) {
                 MaterialTheme.colorScheme.error
             } else {
-                MaterialTheme.colorScheme.outline
+                MaterialTheme.colorScheme.secondary
             },
         ),
         modifier = Modifier.fillMaxWidth(),
@@ -380,45 +344,61 @@ private fun SlotFoodBlock(food: SlotFood, canRemove: Boolean, onRemove: () -> Un
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 40.dp)
-                .padding(start = 10.dp, end = if (canRemove) 0.dp else 10.dp),
+                .padding(start = 10.dp, end = if (canRemove) 2.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = food.name,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
             Text(
                 text = if (isOutside) formatPaise((food.pricePaise ?: 0).toLong()) else "Home",
                 style = MaterialTheme.typography.labelMedium,
-                color = if (isOutside) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
+                fontWeight = FontWeight.Bold,
             )
             if (canRemove) {
-                TextButton(onClick = onRemove) {
-                    Text(text = "✕", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(
+                    onClick = onRemove,
+                    contentPadding = PaddingValues(horizontal = 10.dp),
+                ) {
+                    Text(text = "✕")
                 }
             }
         }
     }
 }
 
-/** The "+ Add food" action, shared so both screens word and size it identically. */
+/**
+ * The add-a-food action: a green block the same width as the food blocks, carrying only a "+".
+ *
+ * A block rather than a text button because it belongs to the stack it adds to — it reads as the
+ * next empty slot in the list. Green so it is plainly the additive action among red and blue food
+ * blocks, and takes [RowScope.weight] so it fills whatever the other actions leave.
+ */
 @Composable
-fun AddFoodAction(onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp)) {
-        Text("+ Add food")
-    }
-}
-
-/** A destructive slot action — "Clear" when planning, "Ate nothing" when recording. */
-@Composable
-fun ClearSlotAction(label: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp)) {
-        Text(text = label, color = MaterialTheme.colorScheme.error)
+fun RowScope.AddFoodAction(onClick: () -> Unit) {
+    val colors = addBlockColors()
+    Surface(
+        color = colors.container,
+        contentColor = colors.content,
+        shape = MaterialTheme.shapes.extraSmall,
+        border = BorderStroke(2.dp, colors.border),
+        modifier = Modifier.weight(1f),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 44.dp)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "+",
+                style = MaterialTheme.typography.titleMedium,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }

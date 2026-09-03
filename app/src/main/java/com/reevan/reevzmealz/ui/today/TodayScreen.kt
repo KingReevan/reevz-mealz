@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.reevan.reevzmealz.ui.common.AddFoodAction
-import com.reevan.reevzmealz.ui.common.ClearSlotAction
 import com.reevan.reevzmealz.ui.common.FoodPickerSheet
 import com.reevan.reevzmealz.ui.common.MealSlotCard
 import com.reevan.reevzmealz.ui.sin.DayAlreadyEndedDialog
@@ -56,7 +55,6 @@ fun TodayScreen(
     sinViewModel: SinViewModel = viewModel(factory = SinViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsState()
-    val anyFoodsExist by viewModel.anyFoodsExist.collectAsState()
     val sinState by sinViewModel.uiState.collectAsState()
     val dayStart by viewModel.dayStart.collectAsState()
     val pickerForSlot by viewModel.pickerSlot.collectAsState()
@@ -120,15 +118,11 @@ fun TodayScreen(
                             supportingLine = state.plannedFoodNames(slot.type)
                                 .takeIf { state.dayLogged && it.isNotEmpty() }
                                 ?.let { "Planned: " + it.joinToString(", ") },
+                            // Just the + block. "Ate nothing" cleared a whole slot in one tap, but
+                            // every row already has its own ✕ in edit mode, so it was a second way
+                            // to do the same thing taking a third of the action row.
                             actions = if (editMode) {
-                                {
-                                    AddFoodAction { viewModel.openPicker(slot.type) }
-                                    if (!slot.isEmpty) {
-                                        ClearSlotAction("Ate nothing") {
-                                            viewModel.clearSlot(slot.type)
-                                        }
-                                    }
-                                }
+                                { AddFoodAction { viewModel.openPicker(slot.type) } }
                             } else {
                                 null
                             },
@@ -183,10 +177,13 @@ fun TodayScreen(
         FoodPickerSheet(
             slotType = slotType,
             foods = addable,
-            anyFoodsExist = anyFoodsExist,
             onDismiss = viewModel::closePicker,
             onPick = { food ->
                 viewModel.addFood(slotType, food)
+                viewModel.closePicker()
+            },
+            onCreateAndPick = { name, source, pricePaise, place ->
+                viewModel.createAndAddFood(slotType, name, source, pricePaise, place)
                 viewModel.closePicker()
             },
         )

@@ -4,41 +4,65 @@ import androidx.room.Dao
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
-/** Read-only spending totals, for the Money Spent section. */
+/**
+ * One outside-food cost inside a period, for the Money Spent breakdown.
+ *
+ * [dayStart] is the day it belongs to, not a precise time: meals are recorded per day, so there is
+ * no clock time to show.
+ */
+data class SpendEntry(
+    val dayStart: Long,
+    val name: String,
+    val pricePaise: Int,
+    val place: String?,
+)
+
+/** Read-only spending detail, for the Money Spent section. */
 @Dao
 interface SpendDao {
 
-    /** What was spent in Bought Items within [start, endExclusive). */
-    @Query(
-        "SELECT COALESCE(SUM(pricePaise), 0) FROM bought_items " +
-            "WHERE boughtAt >= :start AND boughtAt < :endExclusive"
-    )
-    fun observeBoughtItemsTotal(start: Long, endExclusive: Long): Flow<Long>
-
     /**
-     * What was spent on food bought outside within [start, endExclusive).
+     * Every purchase inside [start, endExclusive), newest first.
      *
-     * Mirrors the rule Today uses: a day with its own eaten record counts that record, a day
-     * without one falls back to its plan. Homecooked food is excluded by [outside] rather than by
-     * a null price, so a stray price cannot leak into the total.
+     * The period's total is summed from this list rather than by a second `SUM()` query, so the
+     * headline figure and the itemised breakdown below it cannot disagree.
      */
     @Query(
-        "SELECT COALESCE((" +
-            "SELECT SUM(f.pricePaise) FROM eaten_meals em " +
-            "INNER JOIN foods f ON f.id = em.foodId " +
+        "SELECT * FROM bought_items " +
+            "WHERE boughtAt >= :start AND boughtAt < :endExclusive " +
+            "ORDER BY boughtAt DESC"
+    )
+    fun observeBoughtItemsIn(start: Long, endExclusive: Long): Flow<List<BoughtItem>>
+
+    /**
+     * Every outside-food cost inside [start, endExclusive), newest day first.
+     *
+     * Mirrors the rule Today uses: a day with its own eaten record counts that record, a day
+     * without one falls back to its plan — which is why the two halves of the union exclude each
+     * other on `eaten_days`. Homecooked food is excluded by [outside] rather than by a null price,
+     * so a stray price cannot leak into the total.
+     *
+     * Keep this in step with `effectiveSlots` in `ui/common/PlanSlots.kt`: the same rule has to
+     * exist twice because this half of it must run as SQL.
+     */
+    @Query(
+        "SELECT em.dayStart AS dayStart, f.name AS name, " +
+            "COALESCE(f.pricePaise, 0) AS pricePaise, f.place AS place " +
+            "FROM eaten_meals em INNER JOIN foods f ON f.id = em.foodId " +
             "WHERE em.dayStart >= :start AND em.dayStart < :endExclusive " +
-            "AND f.source = :outside" +
-            "), 0) + COALESCE((" +
-            "SELECT SUM(f.pricePaise) FROM planned_meals pm " +
-            "INNER JOIN foods f ON f.id = pm.foodId " +
+            "AND f.source = :outside " +
+            "UNION ALL " +
+            "SELECT pm.dayStart AS dayStart, f.name AS name, " +
+            "COALESCE(f.pricePaise, 0) AS pricePaise, f.place AS place " +
+            "FROM planned_meals pm INNER JOIN foods f ON f.id = pm.foodId " +
             "WHERE pm.dayStart >= :start AND pm.dayStart < :endExclusive " +
             "AND f.source = :outside " +
-            "AND pm.dayStart NOT IN (SELECT dayStart FROM eaten_days)" +
-            "), 0)"
+            "AND pm.dayStart NOT IN (SELECT dayStart FROM eaten_days) " +
+            "ORDER BY dayStart DESC, name COLLATE NOCASE ASC"
     )
-    fun observeOutsideFoodTotal(
+    fun observeOutsideFoodsIn(
         start: Long,
         endExclusive: Long,
         outside: MealPlace,
-    ): Flow<Long>
+    ): Flow<List<SpendEntry>>
 }

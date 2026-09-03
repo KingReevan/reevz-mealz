@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -90,27 +88,16 @@ fun ReevzMealzApp() {
             )
         },
         bottomBar = {
-            NavigationBar {
-                AppSection.tabs.forEach { entry ->
-                    NavigationBarItem(
-                        // Nothing is selected while paused, and while sitting in a section the
-                        // bar no longer carries — neither is one of these four.
-                        selected = !paused && section == entry,
-                        onClick = {
-                            paused = false
-                            section = entry
-                        },
-                        icon = {
-                            Icon(
-                                painter = painterResource(entry.icon),
-                                contentDescription = entry.title,
-                            )
-                        },
-                        label = { Text(entry.tabLabel, maxLines = 1) },
-                        alwaysShowLabel = true,
-                    )
-                }
-            }
+            RetroNavBar(
+                sections = AppSection.tabs,
+                // Nothing is selected while paused, or while sitting in a section the bar does
+                // not carry — neither is one of these four.
+                selected = section.takeUnless { paused },
+                onSelect = { entry ->
+                    paused = false
+                    section = entry
+                },
+            )
         },
     ) { innerPadding ->
         Box(

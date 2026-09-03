@@ -10,6 +10,7 @@ import com.reevan.reevzmealz.data.Food
 import com.reevan.reevzmealz.data.FoodDao
 import com.reevan.reevzmealz.data.MealDatabase
 import com.reevan.reevzmealz.data.MealPlace
+import com.reevan.reevzmealz.data.foodOf
 import com.reevan.reevzmealz.util.capitalizeWords
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -44,16 +45,12 @@ class FoodsViewModel(private val dao: FoodDao) : ViewModel() {
      * ignores the hint would all otherwise slip through in lower case.
      */
     fun save(id: Long?, name: String, source: MealPlace, pricePaise: Int?, place: String?) {
-        val food = Food(
+        val food = foodOf(
             id = id ?: 0L,
-            name = capitalizeWords(name.trim()),
+            name = name,
             source = source,
-            pricePaise = if (source == MealPlace.HOME) null else pricePaise,
-            place = if (source == MealPlace.HOME) {
-                null
-            } else {
-                place?.trim()?.ifBlank { null }?.let(::capitalizeWords)
-            },
+            pricePaise = pricePaise,
+            place = place,
         )
         viewModelScope.launch {
             if (id == null) dao.insert(food) else dao.update(food)

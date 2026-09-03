@@ -123,6 +123,34 @@ private val GoodGreenDark = Color(0xFF5DFF9F)
 fun goodColor(): Color =
     if (MaterialTheme.colorScheme.background.luminance() < 0.5f) GoodGreenDark else GoodGreenLight
 
+/** Container, glyph and border for the green "add" block. */
+data class AddBlockColors(val container: Color, val content: Color, val border: Color)
+
+/**
+ * The green "+" block that adds a food to a slot.
+ *
+ * Material 3 has no green role, so this is a hand-picked set, chosen the same way [goodColor] is —
+ * by the scheme's own background luminance, so it follows an explicit Light/Dark choice in Settings
+ * rather than the OS. The border does the work of separating the block from the slot panel: a pale
+ * green on the pale pink light-theme panel is only 1.02:1 against it, so without the border the
+ * block would have no edge at all.
+ */
+@Composable
+fun addBlockColors(): AddBlockColors =
+    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
+        AddBlockColors(
+            container = Color(0xFF14532D),
+            content = Color(0xFF7BFFB0),
+            border = Color(0xFF3DDC84),
+        )
+    } else {
+        AddBlockColors(
+            container = Color(0xFFC9F5DA),
+            content = Color(0xFF14532D),
+            border = Color(0xFF1B7F3B),
+        )
+    }
+
 /**
  * The sin bar's colour at a given fraction of the allowance remaining.
  *
