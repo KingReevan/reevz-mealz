@@ -13,8 +13,10 @@ import kotlinx.coroutines.flow.Flow
 data class SpendEntry(
     val dayStart: Long,
     val name: String,
+    /** The **unit** price. Multiply by [quantity] for what the line actually cost. */
     val pricePaise: Int,
     val place: String?,
+    val quantity: Int = 1,
 )
 
 /** Read-only spending detail, for the Money Spent section. */
@@ -47,13 +49,15 @@ interface SpendDao {
      */
     @Query(
         "SELECT em.dayStart AS dayStart, f.name AS name, " +
-            "COALESCE(f.pricePaise, 0) AS pricePaise, f.place AS place " +
+            "COALESCE(f.pricePaise, 0) AS pricePaise, f.place AS place, " +
+            "em.quantity AS quantity " +
             "FROM eaten_meals em INNER JOIN foods f ON f.id = em.foodId " +
             "WHERE em.dayStart >= :start AND em.dayStart < :endExclusive " +
             "AND f.source = :outside " +
             "UNION ALL " +
             "SELECT pm.dayStart AS dayStart, f.name AS name, " +
-            "COALESCE(f.pricePaise, 0) AS pricePaise, f.place AS place " +
+            "COALESCE(f.pricePaise, 0) AS pricePaise, f.place AS place, " +
+            "pm.quantity AS quantity " +
             "FROM planned_meals pm INNER JOIN foods f ON f.id = pm.foodId " +
             "WHERE pm.dayStart >= :start AND pm.dayStart < :endExclusive " +
             "AND f.source = :outside " +

@@ -1,5 +1,6 @@
 package com.reevan.reevzmealz.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -29,7 +30,8 @@ import androidx.room.PrimaryKey
     indices = [
         Index(value = ["dayStart", "type"]),
         Index(value = ["foodId"]),
-        // The same food twice in one slot is a mis-tap, not a quantity of two.
+        // One row per food per slot: a second helping raises [PlannedMeal.quantity] rather
+        // than adding a duplicate line, which is what makes the "x2" tag possible.
         Index(value = ["dayStart", "type", "foodId"], unique = true),
     ],
 )
@@ -39,6 +41,16 @@ data class PlannedMeal(
     val dayStart: Long,
     val type: MealType,
     val foodId: Long,
+    /**
+     * How many of this food, at least 1.
+     *
+     * A column with a default rather than a repeated row: the same food twice in one slot is one
+     * line reading "x2", not two identical lines. Stored per row, so the 90% of entries that are
+     * a single helping cost one integer and need no thought — nothing has to be written for a
+     * quantity of 1, and nothing shows in the UI for it either.
+     */
+    @ColumnInfo(defaultValue = "1")
+    val quantity: Int = 1,
 )
 
 /**
@@ -55,4 +67,6 @@ data class SlotFood(
     val name: String,
     val source: MealPlace,
     val pricePaise: Int?,
+    /** How many of it. Defaults to 1 so the common single helping needs no thought. */
+    val quantity: Int = 1,
 )

@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.reevan.reevzmealz.data.EatenMeal
 import com.reevan.reevzmealz.data.EatenMealDao
 import com.reevan.reevzmealz.data.Food
 import com.reevan.reevzmealz.data.FoodDao
@@ -117,23 +116,14 @@ class TodayViewModel(
      * One flow built once, driven by [_pickerSlot] — not a function returning a fresh `stateIn`,
      * which would start a new sharing coroutine on every recomposition.
      */
-    val addableFoods: StateFlow<List<Food>> =
-        combine(allFoods, uiState, _pickerSlot) { foods, state, slot ->
-            if (slot == null) {
-                emptyList()
-            } else {
-                val taken = state.slots.firstOrNull { it.type == slot }
-                    ?.foods
-                    ?.map { it.foodId }
-                    ?.toSet()
-                    .orEmpty()
-                foods.filterNot { taken.contains(it.id) }
-            }
-        }.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = emptyList(),
-        )
+    /**
+     * Every food, including ones the slot already holds.
+     *
+     * They used to be filtered out, which is precisely what made a second helping impossible:
+     * the food you wanted twice was the one food missing from the list. Picking it again now
+     * raises its quantity, so nothing needs hiding.
+     */
+    val addableFoods: StateFlow<List<Food>> = allFoods
 
     /** Moves to the real current day if it has changed. Called when the screen resumes. */
     fun refreshDay() {
@@ -180,16 +170,20 @@ class TodayViewModel(
                 foodOf(name = name, source = source, pricePaise = pricePaise, place = place),
             )
             eatenMealDao.startLoggingDay(day)
-            eatenMealDao.insert(EatenMeal(dayStart = day, type = type, foodId = id))
+            eatenMealDao.addOne(dayStart = day, type = type, foodId = id)
         }
     }
 
+    /**
+     * Records one helping of [food]. Adding the same food again raises its quantity rather than
+     * doing nothing, which is what a second kebab is.
+     */
     fun addFood(type: MealType, food: Food) {
         val day = _dayStart.value
         viewModelScope.launch {
             // Safe to repeat: seeding only happens once per day.
             eatenMealDao.startLoggingDay(day)
-            eatenMealDao.insert(EatenMeal(dayStart = day, type = type, foodId = food.id))
+            eatenMealDao.addOne(dayStart = day, type = type, foodId = food.id)
         }
     }
 

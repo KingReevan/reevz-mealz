@@ -1,5 +1,6 @@
 package com.reevan.reevzmealz.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -33,6 +34,16 @@ data class EatenMeal(
     val dayStart: Long,
     val type: MealType,
     val foodId: Long,
+    /**
+     * How many of this food, at least 1.
+     *
+     * A column with a default rather than a repeated row: the same food twice in one slot is one
+     * line reading "x2", not two identical lines. Stored per row, so the 90% of entries that are
+     * a single helping cost one integer and need no thought — nothing has to be written for a
+     * quantity of 1, and nothing shows in the UI for it either.
+     */
+    @ColumnInfo(defaultValue = "1")
+    val quantity: Int = 1,
 )
 
 /**

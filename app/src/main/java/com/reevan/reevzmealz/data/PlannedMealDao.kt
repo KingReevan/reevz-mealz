@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -15,7 +16,7 @@ interface PlannedMealDao {
      */
     @Query(
         "SELECT pm.id AS entryId, pm.type AS type, f.id AS foodId, f.name AS name, " +
-            "f.source AS source, f.pricePaise AS pricePaise " +
+            "f.source AS source, f.pricePaise AS pricePaise, pm.quantity AS quantity " +
             "FROM planned_meals pm INNER JOIN foods f ON f.id = pm.foodId " +
             "WHERE pm.dayStart = :dayStart " +
             "ORDER BY f.name COLLATE NOCASE ASC"
@@ -33,9 +34,28 @@ interface PlannedMealDao {
     @Query("SELECT COUNT(*) FROM planned_meals WHERE dayStart = :dayStart")
     suspend fun countForDay(dayStart: Long): Int
 
-    /** Assigning a food already in the slot is a no-op rather than a constraint crash. */
+    /** Inserting a food already in the slot is ignored; [addOne] raises its quantity instead. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(plannedMeal: PlannedMeal): Long
+
+    /**
+     * Plans one more of a food: raises the quantity if the slot already holds it, otherwise adds
+     * it with a quantity of 1. See `EatenMealDao.addOne` — the same shape, on the plan side.
+     */
+    @Transaction
+    suspend fun addOne(dayStart: Long, type: MealType, foodId: Long) {
+        val raised = raiseQuantity(dayStart, type, foodId)
+        if (raised == 0) {
+            insert(PlannedMeal(dayStart = dayStart, type = type, foodId = foodId))
+        }
+    }
+
+    /** Returns the number of rows changed, so the caller knows whether to insert instead. */
+    @Query(
+        "UPDATE planned_meals SET quantity = quantity + 1 " +
+            "WHERE dayStart = :dayStart AND type = :type AND foodId = :foodId"
+    )
+    suspend fun raiseQuantity(dayStart: Long, type: MealType, foodId: Long): Int
 
     @Query("DELETE FROM planned_meals WHERE id = :plannedMealId")
     suspend fun deleteById(plannedMealId: Long)

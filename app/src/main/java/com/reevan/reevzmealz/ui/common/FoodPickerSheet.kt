@@ -89,9 +89,8 @@ private const val PLACE_COLUMNS = 2
  * that restaurant's list yet, can be created from the picker. That writes a real row to `foods`,
  * so it is available everywhere afterwards — the same as adding it in the Foods section.
  *
- * [foods] should already exclude what is in the slot, so nothing listed is a no-op tap. Note that
- * this also means a restaurant whose only food is already in the slot drops out of the grid;
- * there is nothing left to pick there, and "+ New place" can still reach it by name.
+ * [foods] is every food, including ones the slot already holds: picking one again raises its
+ * quantity rather than doing nothing, which is how a second helping is recorded.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

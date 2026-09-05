@@ -38,7 +38,7 @@ data class MoneySpentUiState(
 ) {
     /** Totals are summed from the item lists, so the headline can never disagree with them. */
     val boughtItemsPaise: Long = boughtItems.sumOf { it.pricePaise.toLong() }
-    val outsideFoodPaise: Long = outsideFoods.sumOf { it.pricePaise.toLong() }
+    val outsideFoodPaise: Long = outsideFoods.sumOf { it.pricePaise.toLong() * it.quantity }
     val totalPaise: Long = boughtItemsPaise + outsideFoodPaise
 
     /** Bought Items' share of the total, for the split bar. A zero total has nothing to split. */

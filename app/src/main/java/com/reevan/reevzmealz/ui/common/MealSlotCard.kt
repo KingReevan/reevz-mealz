@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,6 +25,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -347,13 +349,29 @@ private fun SlotFoodBlock(food: SlotFood, canRemove: Boolean, onRemove: () -> Un
                 .padding(start = 10.dp, end = if (canRemove) 2.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = food.name,
-                style = MaterialTheme.typography.bodyMedium,
+            // Name and tag share one weighted cell so the tag sits against the name rather than
+            // out by the price. `fill = false` lets the name shrink to its text, which is what
+            // pulls the tag in beside it — but it still gets the whole cell when there is no tag.
+            Row(
                 modifier = Modifier.weight(1f),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = food.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                QuantityTag(quantity = food.quantity)
+            }
             Text(
-                text = if (isOutside) formatPaise((food.pricePaise ?: 0).toLong()) else "Home",
+                // The line's own cost, not the unit price: with an "x2" tag beside the name, a
+                // unit price would leave the slot's pill unaccountable — 30 + 190 + 60 would not
+                // equal the 310 shown above it. Money Spent shows line totals for the same reason.
+                text = if (isOutside) {
+                    formatPaise((food.pricePaise ?: 0).toLong() * food.quantity)
+                } else {
+                    "Home"
+                },
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
             )
@@ -366,6 +384,35 @@ private fun SlotFoodBlock(food: SlotFood, canRemove: Boolean, onRemove: () -> Un
                 }
             }
         }
+    }
+}
+
+/**
+ * How many of a food, when it is more than one.
+ *
+ * Nothing at all for a single helping — that is the 90% case, and a row of "x1" tags would be
+ * noise carrying no information. The tag inherits the block's own content colour rather than
+ * introducing a fourth colour, which also means it inherits a contrast pair already checked
+ * against that block (8.2:1 on red, 7.3:1 on blue in dark; better in light). Outlined rather than
+ * filled: a filled chip needs a colour pair of its own, and the inverted pair failed AA in dark.
+ */
+@Composable
+fun QuantityTag(quantity: Int, modifier: Modifier = Modifier) {
+    if (quantity <= 1) return
+    val colour = LocalContentColor.current
+    Surface(
+        color = Color.Transparent,
+        contentColor = colour,
+        shape = MaterialTheme.shapes.small,
+        border = BorderStroke(1.dp, colour),
+        modifier = modifier.padding(start = 8.dp),
+    ) {
+        Text(
+            text = "x" + quantity,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+        )
     }
 }
 

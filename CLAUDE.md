@@ -180,7 +180,7 @@ app/src/main/java/com/reevan/reevzmealz/
 │   ├── SinDao.kt                sin counts, endDay transaction, allowance settings
 │   ├── SpendDao.kt              read-only period totals for Money Spent
 │   ├── MaintenanceDao.kt        12-month retention purge (the only bulk delete)
-│   └── MealDatabase.kt          @Database v8, singleton, exportSchema, autoMigrations
+│   └── MealDatabase.kt          @Database v9, singleton, exportSchema, autoMigrations
 ├── notify/
 │   ├── PlanReminderScheduler.kt  AlarmManager arming + pure nextTriggerAt
 │   ├── PlanReminderReceiver.kt   checks tomorrow, notifies, re-arms
@@ -422,6 +422,33 @@ Conventions set in milestone 1 — keep following them:
 - A locked day shows **no `+` blocks and no ✕** (`actions = null`, `canRemove = lock.isOpen`),
   which makes the locked screen considerably shorter than the editable one — that is why the
   two-line locked heading costs nothing.
+- **A slot row carries a quantity, and one row is one food** (`quantity`, default 1, on both
+  `planned_meals` and `eaten_meals`). Two kebabs is one row reading "x2", not two identical rows —
+  which is why the unique index on (dayStart, type, foodId) stays. Added as v9 via `@AutoMigration`;
+  `NOT NULL DEFAULT 1` means every pre-existing row keeps meaning exactly what it meant, and the
+  common single helping needs nothing written or shown.
+- **Adding a food already in the slot raises its quantity** (`addOne` on both DAOs: an UPDATE that
+  reports rows-changed, then an INSERT only if it changed none, inside a `@Transaction`). This is
+  also why the picker **no longer filters out foods already in the slot** — that filter was the
+  bug: the one food you wanted twice was the one food missing from the list.
+- **Quantity multiplies money in three places, and all three are unit-tested** (`QuantityTest`):
+  `PlanSlot.costPaise`, `SpendLine.pricePaise`, and `MoneySpentUiState.outsideFoodPaise`. Missing
+  any one of them would understate a total while looking entirely plausible, which is the worst
+  kind of bug this app can have.
+- **A row shows what the line cost, not the unit price.** With an "x2" tag beside the name, a unit
+  price leaves the slot's own pill unaccountable — 30 + 190 + 60 does not equal the 310 above it.
+  Money Spent's rows do the same. The unit price lives in the Foods section.
+- **The `x2` tag is drawn only above 1** (`QuantityTag` in `MealSlotCard.kt`, shared with Money
+  Spent). It is outlined in the block's **own content colour** rather than filled with a colour of
+  its own: it then inherits a contrast pair already checked against that block (8.2:1 on red,
+  7.3:1 on blue in dark), and the obvious filled alternative — container text on the border
+  colour — measured 3.6:1 and 4.1:1 in dark, which fails AA.
+- `startLoggingDay` copies the plan's quantity across, so a planned double helping starts as a
+  double rather than silently becoming one.
+- **✕ removes the whole line, quantity and all.** There is deliberately no decrement control: the
+  ask was quantity without cramping the row, and every row already carries exactly one action.
+  Correcting x3 to x2 therefore means removing and re-adding twice — say so if that matters, since
+  making ✕ decrement is a one-line change.
 - **`MealType` declaration order is the UI order**: breakfast, lunch, snack, dinner. Room stores
   enums by name, so reordering is safe for existing rows — but never rely on `ordinal`.
 - **The ad-hoc meal log is superseded.** `Meal` / `MealDao` are still declared on the database so

@@ -11,7 +11,6 @@ import com.reevan.reevzmealz.data.FoodDao
 import com.reevan.reevzmealz.data.MealDatabase
 import com.reevan.reevzmealz.data.MealPlace
 import com.reevan.reevzmealz.data.MealType
-import com.reevan.reevzmealz.data.PlannedMeal
 import com.reevan.reevzmealz.data.PlannedMealDao
 import com.reevan.reevzmealz.data.foodOf
 import com.reevan.reevzmealz.ui.common.PlanSlot
@@ -120,23 +119,11 @@ class PlanMealViewModel(
      * One flow built once, driven by [_pickerSlot] — not a function returning a fresh `stateIn`,
      * which would start a new sharing coroutine on every recomposition.
      */
-    val assignableFoods: StateFlow<List<Food>> =
-        combine(allFoods, uiState, _pickerSlot) { foods, state, slot ->
-            if (slot == null) {
-                emptyList()
-            } else {
-                val taken = state.slots.firstOrNull { it.type == slot }
-                    ?.foods
-                    ?.map { it.foodId }
-                    ?.toSet()
-                    .orEmpty()
-                foods.filterNot { taken.contains(it.id) }
-            }
-        }.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = emptyList(),
-        )
+    /**
+     * Every food, including ones the slot already holds — picking one again raises its quantity.
+     * See `TodayViewModel.addableFoods` for why nothing is filtered out any more.
+     */
+    val assignableFoods: StateFlow<List<Food>> = allFoods
 
     /**
      * Re-checks the lock against the clock, not against cached state.
@@ -180,13 +167,12 @@ class PlanMealViewModel(
         _anchorDay.value = startOfDay(dayStart)
     }
 
+    /** Plans one helping; assigning the same food again raises its quantity. */
     fun assignFood(type: MealType, food: Food) {
         if (!selectedDayIsOpen()) return
         val day = _selectedDay.value
         viewModelScope.launch {
-            plannedMealDao.insert(
-                PlannedMeal(dayStart = day, type = type, foodId = food.id),
-            )
+            plannedMealDao.addOne(dayStart = day, type = type, foodId = food.id)
         }
     }
 
@@ -209,7 +195,7 @@ class PlanMealViewModel(
             val id = foodDao.insert(
                 foodOf(name = name, source = source, pricePaise = pricePaise, place = place),
             )
-            plannedMealDao.insert(PlannedMeal(dayStart = day, type = type, foodId = id))
+            plannedMealDao.addOne(dayStart = day, type = type, foodId = id)
         }
     }
 

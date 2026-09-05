@@ -21,8 +21,11 @@ data class SpendLine(
     val name: String,
     /** The place for outside food, "Bought item" for groceries; null if there is nothing to say. */
     val detail: String?,
+    /** What the line came to: unit price times quantity. */
     val pricePaise: Long,
     val stream: SpendStream,
+    /** Shown as an "x2" tag; 1 means nothing is shown. */
+    val quantity: Int = 1,
 )
 
 /** Everything spent on one day, with what the day came to. */
@@ -51,8 +54,10 @@ fun spendLines(
             dayStart = entry.dayStart,
             name = entry.name,
             detail = entry.place,
-            pricePaise = entry.pricePaise.toLong(),
+            // The line's own cost, not the unit price — two kebabs is two kebabs' worth.
+            pricePaise = entry.pricePaise.toLong() * entry.quantity,
             stream = SpendStream.OUTSIDE_FOOD,
+            quantity = entry.quantity,
         )
     }
     val itemLines = boughtItems.map { item ->

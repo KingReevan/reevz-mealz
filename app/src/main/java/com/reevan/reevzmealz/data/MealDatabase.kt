@@ -34,7 +34,7 @@ import androidx.room.RoomDatabase
         SinSettings::class,
         AppSettings::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
@@ -44,6 +44,9 @@ import androidx.room.RoomDatabase
         AutoMigration(from = 5, to = 6),
         AutoMigration(from = 6, to = 7),
         AutoMigration(from = 7, to = 8),
+        // Adds quantity to planned_meals and eaten_meals; both default to 1, so every
+        // existing row keeps meaning exactly what it meant.
+        AutoMigration(from = 8, to = 9),
     ],
 )
 abstract class MealDatabase : RoomDatabase() {

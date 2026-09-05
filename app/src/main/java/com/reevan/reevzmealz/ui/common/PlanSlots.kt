@@ -17,7 +17,9 @@ data class PlanSlot(
 ) {
     val costPaise: Long =
         foods.filter { it.source == MealPlace.OUT }
-            .sumOf { (it.pricePaise ?: 0).toLong() }
+            // Times the quantity: two kebabs cost twice one kebab. Missing this is the one way
+            // a quantity can silently corrupt every total in the app.
+            .sumOf { (it.pricePaise ?: 0).toLong() * it.quantity }
 
     val isEmpty: Boolean = foods.isEmpty()
 

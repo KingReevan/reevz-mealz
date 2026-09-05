@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.reevan.reevzmealz.ui.common.QuantityTag
 import com.reevan.reevzmealz.util.RETAINED_MONTHS
 import com.reevan.reevzmealz.util.formatDayHeading
 import com.reevan.reevzmealz.util.formatPaise
@@ -157,6 +158,7 @@ fun MoneySpentScreen(
                         val line = section.lines[index]
                         SpendItemRow(
                             name = line.name,
+                            quantity = line.quantity,
                             detail = line.detail,
                             paise = line.pricePaise,
                             // Blue for groceries, not pink: pink sat 25 degrees of hue from the
@@ -394,6 +396,7 @@ private fun DayHeader(label: String, totalPaise: Long) {
 @Composable
 private fun SpendItemRow(
     name: String,
+    quantity: Int,
     detail: String?,
     paise: Long,
     accent: Color,
@@ -415,7 +418,15 @@ private fun SpendItemRow(
                 .weight(1f)
                 .padding(start = 10.dp),
         ) {
-            Text(text = name, style = MaterialTheme.typography.bodyMedium)
+            // The tag beside the name is what explains a doubled figure on the right.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                QuantityTag(quantity = quantity)
+            }
             if (!detail.isNullOrBlank()) {
                 Text(
                     text = detail,
